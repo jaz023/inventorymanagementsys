@@ -1,7 +1,7 @@
 /* =========================
    ✅ 設定：改成你的 GAS Web App URL（/exec）
 ========================= */
-const API_BASE = "https://script.google.com/macros/s/AKfycbwYrHQuq7JYQ0bvU06Lj6Df7jvk3BWRimLTZItKmlLkPRPqu5yZb_SiBPjeMQYR1GML/exec";
+const API_BASE = "https://script.google.com/macros/s/AKfycbwSoD1JFU2oPlICj4MmmoU39gafORQv5cXzJR0JVHq97c_dcV13QZH9PlbyacK1oV_F/exec";
 
 /* =========================
    7日間ログ（localStorage）
