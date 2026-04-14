@@ -1,0 +1,129 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 10px;
+  position: relative;
+  text-align: center;
+  font-size: 18px; /* ✅ 改小（原本30太大） */
+}
+
+.container {
+  position: relative;
+  padding-top: 120px;
+}
+
+.logo {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 200px;
+  height: 100px;
+  z-index: 10;
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 40px;
+  text-align: center;
+}
+
+nav {
+  margin-top: 20px;
+}
+
+nav button {
+  margin-right: 10px;
+  padding: 8px 15px;
+}
+
+.page {
+  display: none;
+  margin-top: 30px;
+}
+
+.page.active {
+  display: block;
+}
+
+/* =========================
+   ✅ 表格優化（重點在這）
+========================= */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  table-layout: fixed; /* ✅ 固定欄位寬度 */
+}
+
+th, td {
+  border: 1px solid #ccc;
+  padding: 10px;
+  text-align: left;
+  font-size: 16px; /* ✅ 表格字單獨控制 */
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+/* ✅ 欄位比例（超重要） */
+th:nth-child(1), td:nth-child(1) { width: 28%; }
+th:nth-child(2), td:nth-child(2) { width: 14%; }
+th:nth-child(3), td:nth-child(3) { width: 20%; }
+th:nth-child(4), td:nth-child(4) { width: 8%; text-align: center; }
+th:nth-child(5), td:nth-child(5) { width: 14%; }
+th:nth-child(6), td:nth-child(6) { width: 16%; }
+
+img.preview {
+  max-width: 50px;
+  max-height: 50px;
+  object-fit: cover;
+}
+
+button {
+  padding: 15px 25px;
+  font-size: 18px;
+  border-radius: 8px;
+}
+
+#inReader, #outReader {
+  display: block;
+  margin: 10px auto 0 auto;
+  width: 300px;
+  height: 300px;
+  background: black;
+}
+
+.low-stock-box {
+  width: min(900px, 92%);
+  margin: 20px auto 30px;
+  padding: 18px 20px;
+  background: #fff7f7;
+  border: 2px solid #e3b4b4;
+  border-radius: 12px;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.low-stock-box h3 {
+  margin: 0 0 12px 0;
+  text-align: center;
+  font-size: 28px;
+}
+
+#lowStockAlert {
+  font-size: 20px;
+  line-height: 1.8;
+}
+
+.low-stock-empty {
+  text-align: center;
+  color: #444;
+}
+
+.low-stock-list {
+  margin: 0;
+  padding-left: 24px;
+}
+
+.low-stock-list li {
+  margin: 8px 0;
+}
