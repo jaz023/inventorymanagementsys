@@ -6,10 +6,6 @@ const API_BASE = "https://script.google.com/macros/s/AKfycbwSoD1JFU2oPlICj4MmmoU
 /* =========================
    7日間ログ（localStorage）
 ========================= */
-const LOG_KEY = "stock_logs_v1";
-const KEEP_DAYS = 7;
-const KEEP_MS = KEEP_DAYS * 24 * 60 * 60 * 1000;
-
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
@@ -26,43 +22,6 @@ function escapeHtml(str) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-}
-
-function loadLogs() {
-  try {
-    const raw = localStorage.getItem(LOG_KEY);
-    const logs = raw ? JSON.parse(raw) : [];
-    return Array.isArray(logs) ? logs : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveLogs(logs) {
-  localStorage.setItem(LOG_KEY, JSON.stringify(logs));
-}
-
-function pruneLogs(logs) {
-  const now = Date.now();
-  return logs.filter(l => (now - Number(l.ts || 0)) <= KEEP_MS);
-}
-
-function addHomeLog({ timeText, type, productName, qty, reason, operator }) {
-  const logs = pruneLogs(loadLogs());
-
-  logs.unshift({
-    ts: Date.now(),
-    timeText: timeText || getNowTime(),
-    type: type || "",
-    productName: productName || "",
-    qty: qty ?? "",
-    reason: reason || "",
-    operator: operator || ""
-  });
-
-  logs.sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
-  saveLogs(logs);
-  renderHomeLogs();
 }
 
 async function fetchHomeLogs() {
@@ -122,27 +81,13 @@ async function renderHomeLogs() {
     `).join("");
 
   } catch (e) {
-    console.error(e);
+    console.error("logs error:", e);
     tbody.innerHTML = `
       <tr>
         <td colspan="6">讀取失敗</td>
       </tr>
     `;
   }
-}
-
-  logs.forEach(l => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(l.timeText)}</td>
-      <td>${escapeHtml(l.type)}</td>
-      <td>${escapeHtml(l.productName)}</td>
-      <td>${escapeHtml(l.qty)}</td>
-      <td>${escapeHtml(l.reason)}</td>
-      <td>${escapeHtml(l.operator)}</td>
-    `;
-    tbody.appendChild(tr);
-  });
 }
 
 /* =========================
@@ -1000,7 +945,7 @@ function bindInputEvents_() {
    初始化
 ========================= */
 document.addEventListener("DOMContentLoaded", async () => {
-  renderHomeLogs();
+  await renderHomeLogs();
 
   await loadOperatorsTo("operatorIn");
   await loadOperatorsTo("operatorOut");
