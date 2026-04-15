@@ -65,25 +65,71 @@ function addHomeLog({ timeText, type, productName, qty, reason, operator }) {
   renderHomeLogs();
 }
 
-function renderHomeLogs() {
+async function fetchHomeLogs() {
+  const res = await fetch(`${API_BASE}?action=logs&_t=${Date.now()}`, {
+    cache: "no-store"
+  });
+
+  const text = await res.text();
+  let data;
+
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("logs 回傳不是 JSON");
+  }
+
+  if (!data || data.status !== "ok") {
+    throw new Error("讀取 logs 失敗");
+  }
+
+  return Array.isArray(data.logs) ? data.logs : [];
+}
+
+async function renderHomeLogs() {
   const tbody = document.getElementById("homeLogBody");
   if (!tbody) return;
 
-  const logs = pruneLogs(loadLogs()).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
-  saveLogs(logs);
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="6">讀取中...</td>
+    </tr>
+  `;
 
-  tbody.innerHTML = "";
+  try {
+    const logs = await fetchHomeLogs();
 
-  if (logs.length === 0) {
+    if (!logs.length) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align:center; color:#666;">
+            直近7日間の出入庫記録はありません
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = logs.map(l => `
+      <tr>
+        <td>${escapeHtml(l.timeText)}</td>
+        <td>${escapeHtml(l.type)}</td>
+        <td>${escapeHtml(l.productName)}</td>
+        <td>${escapeHtml(l.qty)}</td>
+        <td>${escapeHtml(l.reason)}</td>
+        <td>${escapeHtml(l.operator)}</td>
+      </tr>
+    `).join("");
+
+  } catch (e) {
+    console.error(e);
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align:center; color:#666;">
-          直近7日間の出入庫記録はありません
-        </td>
+        <td colspan="6">讀取失敗</td>
       </tr>
     `;
-    return;
   }
+}
 
   logs.forEach(l => {
     const tr = document.createElement("tr");
@@ -164,9 +210,9 @@ async function showPage(pageId) {
   refreshOutConfirmState();
 
   if (pageId === "home") {
-    await refreshHomeStats();
-    renderHomeLogs();
-  }
+  await refreshHomeStats();
+  await renderHomeLogs();
+}
 
   if (pageId === "sidTracker") {
     clearSidResult(false);
@@ -556,7 +602,6 @@ async function addStock() {
   const qty = Number(document.getElementById("stockInQty")?.value || 0);
   const reason = String(document.getElementById("stockInNote")?.value || "").trim();
   const operator = getOperatorValue("operatorIn");
-  const nowTime = getNowTime();
 
   if (!operator) {
     alert("請輸入/選擇 入庫人員名稱");
@@ -588,15 +633,6 @@ async function addStock() {
     const res = await postForm_(API_BASE, payload);
     if (res.status !== "ok") throw new Error(res.message || "入庫失敗");
 
-    addHomeLog({
-      timeText: nowTime,
-      type: "入庫",
-      productName: payload.nameJP || payload.code,
-      qty,
-      reason,
-      operator
-    });
-
     if (typeof res.stock === "number") {
       setText("itemStock", res.stock);
       setValue("editStockIn", res.stock);
@@ -604,6 +640,8 @@ async function addStock() {
     }
 
     await refreshHomeStats();
+    await renderHomeLogs();
+
     showMessage("✅ 入庫を記録しました。", true);
 
     currentIn = null;
@@ -615,7 +653,6 @@ async function addStock() {
     disableInConfirm(false);
   }
 }
-
 /* =========================
    ✅ 新品入庫
 ========================= */
@@ -629,7 +666,6 @@ async function addNewItem() {
   const qty = Number(document.getElementById("newItemQty")?.value || 0);
   const reason = String(document.getElementById("newItemNote")?.value || "").trim();
   const operator = getOperatorValue("operatorIn");
-  const nowTime = getNowTime();
 
   if (!operator) {
     alert("請輸入/選擇 入庫人員名稱");
@@ -669,16 +705,10 @@ async function addNewItem() {
     const res = await postForm_(API_BASE, payload);
     if (res.status !== "ok") throw new Error(res.message || "新增入庫失敗");
 
-    addHomeLog({
-      timeText: nowTime,
-      type: "入庫(新規)",
-      productName: nameJP || code,
-      qty,
-      reason,
-      operator
-    });
-
+    // ✅ 雲端同步刷新
     await refreshHomeStats();
+    await renderHomeLogs();
+
     showMessage("✅ 新規備品を登録し、入庫を記録しました。", true);
 
     const newForm = document.getElementById("newItemForm");
@@ -750,14 +780,8 @@ async function submitStockOut() {
     const res = await postForm_(API_BASE, payload);
     if (res.status !== "ok") throw new Error(res.message || "出庫失敗");
 
-    addHomeLog({
-      timeText: nowTime,
-      type: "出庫",
-      productName: payload.nameJP || payload.code,
-      qty,
-      reason,
-      operator
-    });
+  await refreshHomeStats();
+  await renderHomeLogs();
 
     if (typeof res.stock === "number") {
       setText("outItemStock", res.stock);
