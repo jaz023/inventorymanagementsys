@@ -127,3 +127,98 @@ button {
 .low-stock-list li {
   margin: 8px 0;
 }
+
+/* =========================
+   備品検索：カード表示
+========================= */
+.search-card-list {
+  width: 100%;
+  max-width: 900px;
+  margin: 20px auto;
+}
+
+.search-card {
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 14px;
+  background: #fff;
+  text-align: left;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.search-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+.item-name {
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.stock-ok {
+  color: green;
+  font-size: 20px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.stock-zero {
+  color: red;
+  font-size: 20px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.search-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+}
+
+.search-grid div {
+  border-bottom: 1px dashed #ddd;
+  padding-bottom: 6px;
+}
+
+.search-grid span {
+  display: block;
+  color: #666;
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+
+.search-grid b {
+  font-size: 16px;
+  word-break: break-word;
+}
+
+.empty-message {
+  text-align: center;
+  color: #666;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+@media (max-width: 700px) {
+  .search-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .search-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .item-name {
+    font-size: 18px;
+  }
+}
