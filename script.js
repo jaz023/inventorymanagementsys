@@ -30,16 +30,16 @@ async function fetchHomeLogs() {
   });
 
   const text = await res.text();
-  let data;
 
+  let data;
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error("logs 回傳不是 JSON");
+    throw new Error("logs 回傳不是 JSON：" + text.slice(0, 200));
   }
 
   if (!data || data.status !== "ok") {
-    throw new Error("讀取 logs 失敗");
+    throw new Error(data?.message || "讀取 logs 失敗");
   }
 
   return Array.isArray(data.logs) ? data.logs : [];
@@ -51,7 +51,9 @@ async function renderHomeLogs() {
 
   tbody.innerHTML = `
     <tr>
-      <td colspan="6">讀取中...</td>
+      <td colspan="6" style="text-align:center; color:#666;">
+        讀取中...
+      </td>
     </tr>
   `;
 
@@ -81,10 +83,12 @@ async function renderHomeLogs() {
     `).join("");
 
   } catch (e) {
-    console.error("logs error:", e);
+    console.error(e);
     tbody.innerHTML = `
       <tr>
-        <td colspan="6">讀取失敗</td>
+        <td colspan="6" style="text-align:center; color:red;">
+          讀取失敗
+        </td>
       </tr>
     `;
   }
@@ -155,8 +159,12 @@ async function showPage(pageId) {
   refreshOutConfirmState();
 
   if (pageId === "home") {
-  await refreshHomeStats();
-  await renderHomeLogs();
+    await refreshHomeStats();
+    renderHomeLogs();
+  }
+
+if (pageId === "search-page") {
+  clearInventorySearchResult();
 }
 
   if (pageId === "sidTracker") {
@@ -345,6 +353,12 @@ let currentOut = null;
    入庫：掃描成功
 ========================= */
 async function onScanInSuccess(decodedText) {
+  const operator = getOperatorValue("operatorIn");
+  if (!operator) {
+    showMessage("❌ 先にメンバー名前を入力してください。", false);
+    return;
+  }
+
   const qrRaw = parseQrText(decodedText);
   const q = normalizeQrFields(qrRaw);
   const code = String(q.drawing || standardizeCode(qrRaw) || "").trim().toUpperCase();
@@ -547,10 +561,11 @@ async function addStock() {
   const qty = Number(document.getElementById("stockInQty")?.value || 0);
   const reason = String(document.getElementById("stockInNote")?.value || "").trim();
   const operator = getOperatorValue("operatorIn");
+  const nowTime = getNowTime();
 
   if (!operator) {
-    alert("請輸入/選擇 入庫人員名稱");
-    return;
+   showOutMessage("❌ 請輸入庫人員名稱", false);
+   return;
   }
   if (!Number.isFinite(qty) || qty <= 0) {
     alert("入庫數量必須 >= 1");
@@ -578,6 +593,9 @@ async function addStock() {
     const res = await postForm_(API_BASE, payload);
     if (res.status !== "ok") throw new Error(res.message || "入庫失敗");
 
+    await refreshHomeStats();
+    await renderHomeLogs();
+
     if (typeof res.stock === "number") {
       setText("itemStock", res.stock);
       setValue("editStockIn", res.stock);
@@ -585,8 +603,6 @@ async function addStock() {
     }
 
     await refreshHomeStats();
-    await renderHomeLogs();
-
     showMessage("✅ 入庫を記録しました。", true);
 
     currentIn = null;
@@ -598,6 +614,7 @@ async function addStock() {
     disableInConfirm(false);
   }
 }
+
 /* =========================
    ✅ 新品入庫
 ========================= */
@@ -611,10 +628,11 @@ async function addNewItem() {
   const qty = Number(document.getElementById("newItemQty")?.value || 0);
   const reason = String(document.getElementById("newItemNote")?.value || "").trim();
   const operator = getOperatorValue("operatorIn");
+  const nowTime = getNowTime();
 
   if (!operator) {
-    alert("請輸入/選擇 入庫人員名稱");
-    return;
+   showOutMessage("❌ 請輸入庫人員名稱", false);
+   return;
   }
   if (!code) {
     alert("請先掃描 QRCode");
@@ -650,10 +668,10 @@ async function addNewItem() {
     const res = await postForm_(API_BASE, payload);
     if (res.status !== "ok") throw new Error(res.message || "新增入庫失敗");
 
-    // ✅ 雲端同步刷新
     await refreshHomeStats();
     await renderHomeLogs();
 
+    await refreshHomeStats();
     showMessage("✅ 新規備品を登録し、入庫を記録しました。", true);
 
     const newForm = document.getElementById("newItemForm");
@@ -696,8 +714,8 @@ async function submitStockOut() {
   const nowTime = getNowTime();
 
   if (!operator) {
-    alert("請輸入/選擇 出庫人員名稱");
-    return;
+   showOutMessage("❌ 請輸入出庫人員名稱", false);
+   return;
   }
   if (!Number.isFinite(qty) || qty <= 0) {
     alert("出庫數量必須 >= 1");
@@ -725,8 +743,8 @@ async function submitStockOut() {
     const res = await postForm_(API_BASE, payload);
     if (res.status !== "ok") throw new Error(res.message || "出庫失敗");
 
-  await refreshHomeStats();
-  await renderHomeLogs();
+    await refreshHomeStats();
+    await renderHomeLogs();
 
     if (typeof res.stock === "number") {
       setText("outItemStock", res.stock);
@@ -945,7 +963,7 @@ function bindInputEvents_() {
    初始化
 ========================= */
 document.addEventListener("DOMContentLoaded", async () => {
-  await renderHomeLogs();
+  renderHomeLogs();
 
   await loadOperatorsTo("operatorIn");
   await loadOperatorsTo("operatorOut");
@@ -955,4 +973,184 @@ document.addEventListener("DOMContentLoaded", async () => {
   refreshOutConfirmState();
 
   await refreshHomeStats();
+});
+
+/* =========================
+   🔍 搜尋備品（名稱 / Drawing）
+========================= */
+async function searchItem() {
+  const keyword = document.getElementById("searchInput")?.value.trim();
+  const resultBox = document.getElementById("searchResult");
+
+  if (!keyword) {
+    resultBox.innerHTML = "請輸入搜尋內容";
+    return;
+  }
+
+  resultBox.innerHTML = "搜尋中...";
+
+  try {
+    // 👉 先用 Drawing NO 查
+    const res = await fetch(`${API_BASE}?action=item&code=${encodeURIComponent(keyword)}`);
+    const data = await res.json();
+
+    if (data && Object.keys(data).length > 0) {
+      resultBox.innerHTML = `
+        <div style="border:1px solid #ccc; padding:10px;">
+          <b>✅ 在庫あり</b><br>
+          名稱: ${escapeHtml(data["PartsName JP"] || "-")}<br>
+          Drawing: ${escapeHtml(data["Drawing NO."] || "-")}<br>
+          在庫: <b>${data["Stock"] ?? 0}</b><br>
+          保管棚: ${escapeHtml(data["Tana"] || "-")}
+        </div>
+      `;
+      return;
+    }
+
+    // 👉 如果找不到 → 用 logs 模糊搜尋名稱
+    const logs = await fetchHomeLogs();
+
+    const match = logs.find(l =>
+      (l.productName || "").toLowerCase().includes(keyword.toLowerCase())
+    );
+
+    if (match) {
+      resultBox.innerHTML = `
+        <div style="border:1px solid #ccc; padding:10px;">
+          <b>⚠️ 曾經出現（請確認庫存）</b><br>
+          名稱: ${escapeHtml(match.productName)}<br>
+          最近動作: ${escapeHtml(match.type)}<br>
+          時間: ${escapeHtml(match.timeText)}
+        </div>
+      `;
+    } else {
+      resultBox.innerHTML = `<span style="color:red;">❌ 找不到此備品</span>`;
+    }
+
+  } catch (e) {
+    console.error(e);
+    resultBox.innerHTML = "搜尋失敗";
+  }
+}
+
+/* =========================
+   備品検索：模糊搜尋 Inventory
+========================= */
+function clearInventorySearchResult() {
+  const msg = document.getElementById("inventorySearchMessage");
+  const body = document.getElementById("inventorySearchBody");
+
+  if (msg) msg.innerHTML = "";
+
+  if (body) {
+    body.innerHTML = `
+      <div class="empty-message">検索してください</div>
+    `;
+  }
+}
+
+async function searchInventoryItems() {
+  const input = document.getElementById("inventorySearchInput");
+  const msg = document.getElementById("inventorySearchMessage");
+  const body = document.getElementById("inventorySearchBody");
+
+  const keyword = String(input?.value || "").trim();
+
+  if (!body) return;
+
+  if (!keyword) {
+    if (msg) msg.innerHTML = `<span style="color:red;">検索キーワードを入力してください。</span>`;
+    body.innerHTML = `
+      <div class="empty-message">
+          検索してください
+      </div>
+    `;
+    return;
+  }
+
+  if (msg) msg.innerHTML = "検索中...";
+  body.innerHTML = `
+    <div class="empty-message">
+        検索中...
+    </div>
+  `;
+
+  try {
+    const url = `${API_BASE}?action=search_inventory&q=${encodeURIComponent(keyword)}&_t=${Date.now()}`;
+    const res = await fetch(url, { cache: "no-store" });
+    const text = await res.text();
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("後端回傳不是 JSON：" + text.slice(0, 200));
+    }
+
+    if (!data || data.status !== "ok") {
+      throw new Error(data?.message || "検索失敗");
+    }
+
+    const items = Array.isArray(data.items) ? data.items : [];
+
+    if (msg) {
+      msg.innerHTML = `検索結果：${items.length} 件`;
+    }
+
+    if (!items.length) {
+  body.innerHTML = `
+    <div class="empty-message">
+      該当する備品はありません
+    </div>
+  `;
+  return;
+}
+
+    body.innerHTML = items.map(item => {
+  const stock = Number(item.stock || 0);
+  const stockClass = stock <= 0 ? "stock-zero" : "stock-ok";
+
+  return `
+    <div class="search-card">
+      <div class="search-card-header">
+        <div class="item-name">${escapeHtml(item.nameJP || "-")}</div>
+        <div class="${stockClass}">在庫：${escapeHtml(item.stock)}</div>
+      </div>
+
+      <div class="search-grid">
+        <div><span>Drawing NO.</span><b>${escapeHtml(item.drawingNo || "-")}</b></div>
+        <div><span>NO.</span><b>${escapeHtml(item.no || "-")}</b></div>
+        <div><span>分類</span><b>${escapeHtml(item.category || "-")}</b></div>
+        <div><span>製番</span><b>${escapeHtml(item.nameEN || "-")}</b></div>
+        <div><span>Model</span><b>${escapeHtml(item.model || "-")}</b></div>
+        <div><span>保管棚</span><b>${escapeHtml(item.tana || "-")}</b></div>
+        <div><span>入庫時間</span><b>${escapeHtml(item.time || "-")}</b></div>
+        <div><span>入庫者</span><b>${escapeHtml(item.lastOperator || "-")}</b></div>
+        <div><span>SafeStock</span><b>${escapeHtml(item.safeStock || "-")}</b></div>
+      </div>
+    </div>
+  `;
+}).join("");
+
+  } catch (e) {
+    console.error(e);
+    if (msg) msg.innerHTML = `<span style="color:red;">検索失敗：${escapeHtml(e.message || e)}</span>`;
+    body.innerHTML = `
+        <div class="empty-message">
+          検索失敗
+      </div>
+    `;
+  }
+}
+
+/* Enter キーでも検索 */
+document.addEventListener("DOMContentLoaded", () => {
+  const input = document.getElementById("inventorySearchInput");
+  if (input) {
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        searchInventoryItems();
+      }
+    });
+  }
 });
