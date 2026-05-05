@@ -236,7 +236,7 @@ function normalizeQrFields(qr) {
     no: pickQrValue(qr, ["NO", "NO.", "No", "no"]),
     category: pickQrValue(qr, ["CAT", "CATEGORY", "Category"]),
     nameJP: pickQrValue(qr, ["JP", "NAME", "PartsName JP"]),
-    seiban: pickQrValue(qr, ["SEIBAN", "製番"]),
+    seiban: pickQrValue(qr, ["製番", "SEIBAN", "Seiban", "serial", "Serial"]),
     model: pickQrValue(qr, ["MDL", "MODEL", "Model"]),
     drawing: pickQrValue(qr, ["DRW", "DRAWING", "Drawing NO.", "Drawing NO", "DrawingNO"]),
     tana: pickQrValue(qr, ["TANA", "棚", "保管棚"]),
@@ -578,6 +578,7 @@ async function addStock() {
     no: currentIn.no || "",
     category: String(document.getElementById("editCategoryIn")?.value || currentIn.category || "").trim(),
     tana: String(document.getElementById("editTanaIn")?.value || currentIn.tana || "").trim(),
+    usagePlace: document.getElementById("editUsagePlaceIn")?.value || "",
     serialNo: currentIn.sid || "",
     nameJP: currentIn.nameJP || "",
     nameEN: currentIn.nameEN || "",
@@ -648,19 +649,23 @@ async function addNewItem() {
   }
 
   const payload = {
-    type: "入庫(新規)",
-    code,
-    no: qrData.no || "",
-    category: category || qrData.category || "",
-    tana: tana || qrData.tana || "",
-    serialNo: qrData.sid || "",
-    nameJP: nameJP || qrData.nameJP || "",
-    nameEN: qrData.nameEN || "",
-    model: qrData.model || "",
-    quantity: qty,
-    operator,
-    reason
-  };
+  action: "stockIn",
+  type: "入庫(新規)",
+  code: code,
+  no: document.getElementById("editNoIn")?.value || "",
+  category: document.getElementById("editCategoryIn")?.value || "",
+  nameJP: document.getElementById("editNameJpIn")?.value || "",
+  seiban: document.getElementById("editSeibanIn")?.value || "",
+  nameEN: document.getElementById("editNameEnIn")?.value || "",
+  model: document.getElementById("editModelIn")?.value || "",
+  drawing: document.getElementById("editDrawingIn")?.value || code,
+  tana: document.getElementById("editTanaIn")?.value || "",
+  usagePlace: document.getElementById("editUsagePlaceIn")?.value || "",
+  quantity: qty,
+  operator: operator,
+  reason: reason,
+  sid: sid
+};
 
   disableNewItemConfirm(true);
 
@@ -728,6 +733,7 @@ async function submitStockOut() {
     no: currentOut.no || "",
     category: String(document.getElementById("editCategoryOut")?.value || currentOut.category || "").trim(),
     tana: String(document.getElementById("editTanaOut")?.value || currentOut.tana || "").trim(),
+    usagePlace: document.getElementById("editUsagePlaceIn")?.value || "",
     serialNo: currentOut.sid || "",
     nameJP: currentOut.nameJP || "",
     nameEN: currentOut.nameEN || "",
@@ -1119,11 +1125,12 @@ async function searchInventoryItems() {
 
       <div class="search-grid">
         <div><span>Drawing NO.</span><b>${escapeHtml(item.drawingNo || "-")}</b></div>
-        <div><span>NO.</span><b>${escapeHtml(item.no || "-")}</b></div>
+        <div><span>部品名</span><b>${escapeHtml(item.nameJP || "-")}</b></div>
         <div><span>分類</span><b>${escapeHtml(item.category || "-")}</b></div>
-        <div><span>製番</span><b>${escapeHtml(item.nameEN || "-")}</b></div>
+        <div><span>製番</span><b>${escapeHtml(item.seiban || "-")}</b></div>
         <div><span>Model</span><b>${escapeHtml(item.model || "-")}</b></div>
         <div><span>保管棚</span><b>${escapeHtml(item.tana || "-")}</b></div>
+        <div><span>使用場所</span><b>${escapeHtml(item.usagePlace || "-")}</b></div>
         <div><span>入庫時間</span><b>${escapeHtml(item.time || "-")}</b></div>
         <div><span>入庫者</span><b>${escapeHtml(item.lastOperator || "-")}</b></div>
         <div><span>SafeStock</span><b>${escapeHtml(item.safeStock || "-")}</b></div>
