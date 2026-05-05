@@ -10,7 +10,7 @@
 
 <body>
   <div class="container">
-    <img src="sumitomo.png" class="logo" alt="Logo" />
+    <img src="images/sumitomo.png" class="logo" alt="Logo" />
     <h1>物料管理システムデモ</h1>
 
   <nav>
@@ -35,6 +35,178 @@
           <tr>
             <th>時間</th>
             <th>入/出庫</th>
+            <th>部品名</th>
+            <th>数量</th>
+            <th>使用原因</th>
+            <th>メンバー名前</th>
+          </tr>
+        </thead>
+        <tbody id="homeLogBody"></tbody>
+      </table>
+    </div>
+
+    <!-- =========================
+         入庫スキャン
+    ========================== -->
+    <div id="stock-in" class="page">
+      <h2>入庫スキャン</h2>
+
+      <label>メンバー名前：</label>
+      <input type="text" id="operatorIn" placeholder="例: 山田" />
+      <br /><br />
+
+      <button type="button" onclick="startInCamera()" id="startScanBtn">📷 入庫用カメラ啟動</button>
+      <div id="inReader" style="width: 300px; height: 300px; margin-top: 10px;"></div>
+
+      <p style="color:black;">
+        スキャン結果: <span id="scanResult">なし</span>
+      </p>
+
+      <!-- 掃描後顯示 QR 詳細資訊 -->
+      <div id="scanDetailIn"></div>
+      <p>シリアル番号: <span id="scanSidIn">-</span></p>
+
+      <!-- 新規備品フォーム -->
+      <div id="newItemForm" style="display:none; border: 1px solid #ccc; padding: 10px; margin-top: 10px;">
+        <h3>新規部品</h3>
+
+        <label for="newItemCode">コード (Code):</label>
+        <input type="text" id="newItemCode" readonly /><br />
+
+        <label for="newItemName">部品名 (Name):</label>
+        <input type="text" id="newItemName" placeholder="請輸入備品名稱" /><br />
+
+        <label for="newItemCategory">分類 (Category):</label>
+        <input type="text" id="newItemCategory" placeholder="例: 預備品 / 消耗品" /><br />
+
+        <label for="newItemTana">保管棚 (Tana):</label>
+        <input type="text" id="newItemTana" placeholder="例: A1 / A2" /><br />
+
+        <label>使用場所</label>
+        <input id="editUsagePlaceIn" type="text" placeholder="例：RF / 加速器本體 ">
+
+        <label for="newItemQty">数量 (Quantity):</label>
+        <input type="number" id="newItemQty" value="1" min="1" /><br />
+
+        <label for="newItemNote">使用原因 / 備註：</label>
+        <input type="text" id="newItemNote" placeholder="例: 定期補貨" /><br />
+
+        <button type="button" onclick="addNewItem()">新規部品又入庫</button>
+        <button type="button" onclick="cancelNewItem()">キャンセル</button>
+      </div>
+
+      <!-- 既存備品情報 -->
+      <div id="itemInfo" style="display:none; margin-top: 10px;">
+        <p>備品名: <span id="itemName"></span></p>
+
+        <p>
+          分類:
+          <input type="text" id="editCategoryIn" placeholder="例: 預備品 / 消耗品" />
+        </p>
+
+        <p>
+          保管棚:
+          <input type="text" id="editTanaIn" placeholder="例: A1 / A2" />
+        </p>
+
+        <p>在庫数量: <span id="itemStock"></span></p>
+
+        <p id="itemImageWrapper" style="display:none;">
+          <img id="itemImage" src="" alt="備品画像" style="max-width:100px;" />
+        </p>
+
+        <label for="stockInQty">入庫数量:</label>
+        <input id="stockInQty" value="1" /><br />
+
+        <label for="stockInNote">使用理由：</label>
+        <input type="text" id="stockInNote" placeholder="例: 定期補貨" /><br />
+
+        <button type="button" onclick="addStock()">入庫確定</button>
+      </div>
+
+      <div id="noteLog" style="margin-top: 10px;"></div>
+    </div>
+
+    <!-- =========================
+         出庫スキャン
+    ========================== -->
+    <div id="stock-out" class="page">
+      <h2>出庫スキャン</h2>
+
+      <label>メンバー名前：</label>
+      <input type="text" id="operatorOut" placeholder="例: 佐藤" />
+      <br /><br />
+
+      <button type="button" onclick="startOutCamera()">📷 出庫用カメラ啟動</button>
+      <div id="outReader" style="width: 300px; height: 300px; margin-top: 10px;"></div>
+
+      <p>スキャン結果: <span id="scanOutResult">なし</span></p>
+
+      <!-- 掃描後顯示 QR 詳細資訊 -->
+      <div id="scanDetailOut"></div>
+      <p>シリアル番号: <span id="scanSidOut">-</span></p>
+
+      <div id="outItemInfo" style="display:none; margin-top:10px;">
+        <p>備品名: <span id="outItemName"></span></p>
+
+        <p>
+          分類:
+          <input type="text" id="editCategoryOut" placeholder="例: 預備品 / 消耗品" />
+        </p>
+
+        <p>
+          保管棚:
+          <input type="text" id="editTanaOut" placeholder="例: A1 / A2" />
+        </p>
+
+        <p>在庫数量: <span id="outItemStock"></span></p>
+
+        <label for="stockOutQty">出庫数量:</label>
+        <input id="stockOutQty" value="1" /><br />
+
+        <label for="stockOutReason">使用原因:</label>
+        <input type="text" id="stockOutReason" placeholder="例: 螺絲崩牙" /><br />
+
+        <button type="button" onclick="submitStockOut()">出庫確定</button>
+      </div>
+
+      <div id="outNoteLog" style="margin-top: 10px;"></div>
+    </div>
+
+    <section id="sidTracker" class="page">
+
+  <div id="sidQueryMessage" style="margin-top: 12px;"></div>
+</section>
+
+  </div>
+
+  <!-- =========================
+     備品検索
+========================== -->
+<div id="search-page" class="page">
+  <h2>備品検索</h2>
+
+  <p>備品名稱、Drawing NO.、製番、分類、保管棚などで検索できます。</p>
+
+  <input
+    type="text"
+    id="inventorySearchInput"
+    placeholder="例: SHV / 00000KT8761TA / A2"
+    style="width:70%; padding:8px;"
+  />
+
+  <button type="button" onclick="searchInventoryItems()">検索</button>
+
+  <div id="inventorySearchMessage" style="margin-top:12px;"></div>
+
+  <div id="inventorySearchBody" class="search-card-list">
+  <div class="empty-message">検索してください</div>
+</div>
+</div>
+
+  <script src="script.js"></script>
+</body>
+</html>            <th>入/出庫</th>
             <th>部品名</th>
             <th>数量</th>
             <th>使用原因</th>
