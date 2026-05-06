@@ -4,7 +4,7 @@
 const API_BASE = "https://script.google.com/macros/s/AKfycbwSoD1JFU2oPlICj4MmmoU39gafORQv5cXzJR0JVHq97c_dcV13QZH9PlbyacK1oV_F/exec";
 
 /* =========================
-   7日間ログ（localStorage）
+   基本工具
 ========================= */
 function pad2(n) {
   return String(n).padStart(2, "0");
@@ -24,6 +24,25 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = String(text ?? "");
+}
+
+function setValue(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.value = String(val ?? "");
+}
+
+function getOperatorValue(id) {
+  const el = document.getElementById(id);
+  if (!el) return "";
+  return String(el.value || "").trim();
+}
+
+/* =========================
+   Home Logs
+========================= */
 async function fetchHomeLogs() {
   const res = await fetch(`${API_BASE}?action=logs&_t=${Date.now()}`, {
     cache: "no-store"
@@ -51,9 +70,7 @@ async function renderHomeLogs() {
 
   tbody.innerHTML = `
     <tr>
-      <td colspan="6" style="text-align:center; color:#666;">
-        讀取中...
-      </td>
+      <td colspan="6" style="text-align:center; color:#666;">讀取中...</td>
     </tr>
   `;
 
@@ -86,55 +103,33 @@ async function renderHomeLogs() {
     console.error(e);
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align:center; color:red;">
-          讀取失敗
-        </td>
+        <td colspan="6" style="text-align:center; color:red;">讀取失敗</td>
       </tr>
     `;
   }
 }
 
 /* =========================
-   helper: setText / setValue
-========================= */
-function setText(id, text) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = String(text ?? "");
-}
-
-function setValue(id, val) {
-  const el = document.getElementById(id);
-  if (el) el.value = String(val ?? "");
-}
-
-/* =========================
-   ホーム統計：品目數 / 總數量
+   Home Stats
 ========================= */
 async function refreshHomeStats() {
   try {
-    const res = await fetch(`${API_BASE}?action=stats`, {
+    const res = await fetch(`${API_BASE}?action=stats&_t=${Date.now()}`, {
       cache: "no-store"
     });
 
     const text = await res.text();
     let data;
+
     try {
       data = JSON.parse(text);
     } catch {
       throw new Error("stats 回傳不是 JSON");
     }
 
-    if (data && typeof data.itemCount === "number") {
-      setText("itemCount", data.itemCount);
-    } else {
-      setText("itemCount", "-");
-    }
+    setText("itemCount", typeof data.itemCount === "number" ? data.itemCount : "-");
+    setText("totalStock", typeof data.totalStock === "number" ? data.totalStock : "-");
 
-    if (data && typeof data.totalStock === "number") {
-      setText("totalStock", data.totalStock);
-    } else {
-      setText("totalStock", "-");
-    }
   } catch (e) {
     console.warn("refreshHomeStats failed", e);
     setText("itemCount", "-");
@@ -143,7 +138,7 @@ async function refreshHomeStats() {
 }
 
 /* =========================
-   頁面切換 + 停相機
+   Page Control
 ========================= */
 function setActivePage(pageId) {
   document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
@@ -163,9 +158,9 @@ async function showPage(pageId) {
     renderHomeLogs();
   }
 
-if (pageId === "search-page") {
-  clearInventorySearchResult();
-}
+  if (pageId === "search-page") {
+    clearInventorySearchResult();
+  }
 
   if (pageId === "sidTracker") {
     clearSidResult(false);
@@ -173,7 +168,7 @@ if (pageId === "search-page") {
 }
 
 /* =========================
-   顯示訊息
+   Message
 ========================= */
 function showMessage(message, success = true) {
   const noteLog = document.getElementById("noteLog");
@@ -200,7 +195,7 @@ function showSidMessage(message, success = true) {
 }
 
 /* =========================
-   QR 解析
+   QR Parser
 ========================= */
 function parseQrText(rawText) {
   const raw = String(rawText || "").trim();
@@ -212,8 +207,10 @@ function parseQrText(rawText) {
       const p = part.trim();
       const idx = p.indexOf("=");
       if (idx === -1) return;
+
       const k = p.slice(0, idx).trim();
       const v = p.slice(idx + 1).trim();
+
       if (k) obj[k] = v;
     });
   }
@@ -236,10 +233,12 @@ function normalizeQrFields(qr) {
     no: pickQrValue(qr, ["NO", "NO.", "No", "no"]),
     category: pickQrValue(qr, ["CAT", "CATEGORY", "Category"]),
     nameJP: pickQrValue(qr, ["JP", "NAME", "PartsName JP"]),
-    seiban: pickQrValue(qr, ["製番", "SEIBAN", "Seiban", "serial", "Serial"]),
+    nameEN: pickQrValue(qr, ["EN", "PartsName EN"]),
+    seiban: pickQrValue(qr, ["製番", "SEIBAN", "Seiban"]),
     model: pickQrValue(qr, ["MDL", "MODEL", "Model"]),
     drawing: pickQrValue(qr, ["DRW", "DRAWING", "Drawing NO.", "Drawing NO", "DrawingNO"]),
     tana: pickQrValue(qr, ["TANA", "棚", "保管棚"]),
+    location: pickQrValue(qr, ["LOCATION", "Location", "使用場所", "PLACE", "UsagePlace"]),
     sid: pickQrValue(qr, ["SID", "SN", "Serial"])
   };
 }
@@ -249,6 +248,7 @@ function standardizeCode(qrObjOrRaw) {
   if (typeof qrObjOrRaw === "string") return qrObjOrRaw.trim().toUpperCase();
 
   const o = qrObjOrRaw;
+
   const candidate =
     o["DRW"] ||
     o["DRAWING"] ||
@@ -265,63 +265,48 @@ function standardizeCode(qrObjOrRaw) {
 }
 
 /* =========================
-   後端同步：Operators（下拉）
+   Operators
 ========================= */
 async function loadOperatorsTo(elId) {
   const el = document.getElementById(elId);
   if (!el || el.tagName !== "SELECT") return;
 
-  try {
-    const res = await fetch(`${API_BASE}?action=operators`, {
-      cache: "no-store"
-    });
+  const defaultOperators = ["山口", "Jason", "Jeffrey", "Phil"];
 
-    const text = await res.text();
-    let ops;
-    try {
-      ops = JSON.parse(text);
-    } catch {
-      throw new Error("operators 回傳不是 JSON");
-    }
+  const current = el.value;
+  el.innerHTML = "";
 
-    if (!Array.isArray(ops)) return;
+  const opt0 = document.createElement("option");
+  opt0.value = "";
+  opt0.textContent = "選択してください";
+  el.appendChild(opt0);
 
-    const current = el.value;
-    el.innerHTML = "";
+  defaultOperators.forEach(name => {
+    const op = document.createElement("option");
+    op.value = name;
+    op.textContent = name;
+    el.appendChild(op);
+  });
 
-    const opt0 = document.createElement("option");
-    opt0.value = "";
-    opt0.textContent = "選択してください";
-    el.appendChild(opt0);
-
-    ops.forEach(name => {
-      const op = document.createElement("option");
-      op.value = String(name);
-      op.textContent = String(name);
-      el.appendChild(op);
-    });
-
-    if (current) el.value = current;
-  } catch (e) {
-    console.warn("loadOperators failed", e);
-  }
+  if (current) el.value = current;
 }
 
 /* =========================
-   後端同步：Inventory（單筆）
+   Inventory Item
 ========================= */
 async function fetchInventoryItem(code) {
   const c = String(code || "").trim().toUpperCase();
   if (!c) return null;
 
-  const url = `${API_BASE}?action=item&code=${encodeURIComponent(c)}`;
+  const url = `${API_BASE}?action=item&code=${encodeURIComponent(c)}&_t=${Date.now()}`;
   const res = await fetch(url, { cache: "no-store" });
 
   const text = await res.text();
+
   let data;
   try {
     data = JSON.parse(text);
-  } catch (e) {
+  } catch {
     console.error("[fetchInventoryItem] Non-JSON response:", {
       status: res.status,
       url,
@@ -336,15 +321,17 @@ async function fetchInventoryItem(code) {
     code: String(data["Drawing NO."] || data.code || c).toUpperCase(),
     nameJP: data["PartsName JP"] || "",
     nameEN: data["PartsName EN"] || "",
-    category: data["StokeCategory"] || "",
+    category: data["StokeCategory"] || data["Category"] || "",
+    seiban: data["製番"] || data["SEIBAN"] || data["Seiban"] || "",
     model: data["Model"] || "",
     tana: data["Tana"] || data["保管棚"] || "",
+    location: data["使用場所"] || data["UsagePlace"] || data["Location"] || "",
     stock: Number(data["Stock"] || 0)
   };
 }
 
 /* =========================
-   掃描暫存
+   Current Scan Data
 ========================= */
 let currentIn = null;
 let currentOut = null;
@@ -355,7 +342,7 @@ let currentOut = null;
 async function onScanInSuccess(decodedText) {
   const operator = getOperatorValue("operatorIn");
   if (!operator) {
-    showMessage("❌ 先にメンバー名前を入力してください。", false);
+    showMessage("❌ 先にメンバー名前を選択してください。", false);
     return;
   }
 
@@ -373,89 +360,54 @@ async function onScanInSuccess(decodedText) {
   showMessage("照合中...（Inventory 取得中）", true);
 
   let item = null;
+
   try {
     item = await fetchInventoryItem(code);
   } catch (e) {
     console.error(e);
     showMessage(`❌ Inventory 取得失敗：${e.message || e}`, false);
-
-    currentIn = {
-      code,
-      no: q.no,
-      category: q.category,
-      nameJP: q.nameJP,
-      nameEN: q.seiban,
-      model: q.model,
-      drawing: q.drawing,
-      tana: q.tana,
-      sid: q.sid,
-      stock: 0
-    };
-
-    const itemInfo = document.getElementById("itemInfo");
-    const newForm = document.getElementById("newItemForm");
-    if (itemInfo) itemInfo.style.display = "none";
-    if (newForm) newForm.style.display = "block";
-
-    setValue("newItemCode", code);
-    setValue("newItemName", q.nameJP);
-    setValue("newItemCategory", q.category);
-    setValue("newItemTana", q.tana);
-    setValue("newItemQty", 1);
-
-    refreshInConfirmState();
-    return;
   }
 
-  if (item) {
-    currentIn = {
-      code,
-      no: q.no,
-      category: q.category || item.category,
-      nameJP: q.nameJP || item.nameJP,
-      nameEN: q.seiban || item.nameEN,
-      model: q.model || item.model,
-      drawing: q.drawing || item.code,
-      tana: q.tana || item.tana || "",
-      sid: q.sid,
-      stock: item.stock
-    };
+  currentIn = {
+    code,
+    no: q.no,
+    category: q.category || item?.category || "",
+    nameJP: q.nameJP || item?.nameJP || "",
+    nameEN: q.nameEN || item?.nameEN || "",
+    seiban: q.seiban || item?.seiban || "",
+    model: q.model || item?.model || "",
+    drawing: q.drawing || item?.code || code,
+    tana: q.tana || item?.tana || "",
+    location: q.location || item?.location || "",
+    sid: q.sid,
+    stock: item?.stock || 0
+  };
 
-    const itemInfo = document.getElementById("itemInfo");
-    const newForm = document.getElementById("newItemForm");
+  const itemInfo = document.getElementById("itemInfo");
+  const newForm = document.getElementById("newItemForm");
+
+  if (item) {
     if (itemInfo) itemInfo.style.display = "block";
     if (newForm) newForm.style.display = "none";
 
     setText("itemName", currentIn.nameJP || code);
     setValue("editCategoryIn", currentIn.category || "");
     setValue("editTanaIn", currentIn.tana || "");
-    setText("itemStock", item.stock);
-    setValue("editStockIn", item.stock);
+    setValue("editUsagePlaceIn", currentIn.location || "");
+    setText("itemStock", currentIn.stock);
+    setValue("editStockIn", currentIn.stock);
 
     showMessage("✅ 入庫対象を取得しました。QR資訊已自動帶入。", true);
-  } else {
-    currentIn = {
-      code,
-      no: q.no,
-      category: q.category,
-      nameJP: q.nameJP,
-      nameEN: q.seiban,
-      model: q.model,
-      drawing: q.drawing,
-      tana: q.tana,
-      sid: q.sid,
-      stock: 0
-    };
 
-    const itemInfo = document.getElementById("itemInfo");
-    const newForm = document.getElementById("newItemForm");
+  } else {
     if (itemInfo) itemInfo.style.display = "none";
     if (newForm) newForm.style.display = "block";
 
     setValue("newItemCode", code);
-    setValue("newItemName", q.nameJP);
-    setValue("newItemCategory", q.category);
-    setValue("newItemTana", q.tana);
+    setValue("newItemName", currentIn.nameJP);
+    setValue("newItemCategory", currentIn.category);
+    setValue("newItemTana", currentIn.tana);
+    setValue("newItemLocation", currentIn.location);
     setValue("newItemQty", 1);
 
     showMessage("🆕 Inventory に存在しない新品です。QR資訊已自動帶入。", true);
@@ -482,6 +434,7 @@ async function onScanOutSuccess(decodedText) {
   showOutMessage("照合中...（Inventory 取得中）", true);
 
   let item = null;
+
   try {
     item = await fetchInventoryItem(code);
   } catch (e) {
@@ -493,8 +446,10 @@ async function onScanOutSuccess(decodedText) {
 
   if (!item) {
     currentOut = null;
+
     const outInfo = document.getElementById("outItemInfo");
     if (outInfo) outInfo.style.display = "none";
+
     showOutMessage("❌ Inventory に存在しません（出庫不可）", false);
     refreshOutConfirmState();
     return;
@@ -503,12 +458,14 @@ async function onScanOutSuccess(decodedText) {
   currentOut = {
     code,
     no: q.no,
-    category: q.category || item.category,
-    nameJP: q.nameJP || item.nameJP,
-    nameEN: q.seiban || item.nameEN,
-    model: q.model || item.model,
-    drawing: q.drawing || item.code,
+    category: q.category || item.category || "",
+    nameJP: q.nameJP || item.nameJP || "",
+    nameEN: q.nameEN || item.nameEN || "",
+    seiban: q.seiban || item.seiban || "",
+    model: q.model || item.model || "",
+    drawing: q.drawing || item.code || code,
     tana: q.tana || item.tana || "",
+    location: q.location || item.location || "",
     sid: q.sid,
     stock: item.stock
   };
@@ -519,8 +476,9 @@ async function onScanOutSuccess(decodedText) {
   setText("outItemName", currentOut.nameJP || code);
   setValue("editCategoryOut", currentOut.category || "");
   setValue("editTanaOut", currentOut.tana || "");
-  setText("outItemStock", item.stock);
-  setValue("editStockOut", item.stock);
+  setValue("editUsagePlaceOut", currentOut.location || "");
+  setText("outItemStock", currentOut.stock);
+  setValue("editStockOut", currentOut.stock);
 
   showOutMessage("✅ 出庫対象を取得しました。QR資訊已自動帶入。", true);
 
@@ -528,15 +486,21 @@ async function onScanOutSuccess(decodedText) {
   refreshOutConfirmState();
 }
 
+/* =========================
+   Cancel 新品
+========================= */
 function cancelNewItem() {
   const newForm = document.getElementById("newItemForm");
   if (newForm) newForm.style.display = "none";
 
   setText("scanResult", "なし");
+  setText("scanSidIn", "-");
+
   setValue("newItemCode", "");
   setValue("newItemName", "");
   setValue("newItemCategory", "");
   setValue("newItemTana", "");
+  setValue("newItemLocation", "");
   setValue("newItemQty", 1);
   setValue("newItemNote", "");
 
@@ -545,11 +509,11 @@ function cancelNewItem() {
 }
 
 /* =========================
-   ✅ 入庫確定（既存品）
+   入庫確定：既存品
 ========================= */
 async function addStock() {
   if (!currentIn || !currentIn.code) {
-    alert("先にQRコードをスキャンしてください（既存品）。新品は『新增備品並入庫』を使用してください。");
+    alert("先にQRコードをスキャンしてください（既存品）。新品は『新規部品又入庫』を使用してください。");
     return;
   }
 
@@ -561,28 +525,32 @@ async function addStock() {
   const qty = Number(document.getElementById("stockInQty")?.value || 0);
   const reason = String(document.getElementById("stockInNote")?.value || "").trim();
   const operator = getOperatorValue("operatorIn");
-  const nowTime = getNowTime();
 
   if (!operator) {
-   showOutMessage("❌ 請輸入庫人員名稱", false);
-   return;
+    showMessage("❌ 入庫人員を選択してください。", false);
+    return;
   }
+
   if (!Number.isFinite(qty) || qty <= 0) {
     alert("入庫數量必須 >= 1");
     return;
   }
 
   const payload = {
+    action: "stockIn",
     type: "入庫",
     code: currentIn.drawing || currentIn.code,
     no: currentIn.no || "",
     category: String(document.getElementById("editCategoryIn")?.value || currentIn.category || "").trim(),
     tana: String(document.getElementById("editTanaIn")?.value || currentIn.tana || "").trim(),
-    usagePlace: document.getElementById("editUsagePlaceIn")?.value || "",
+    usagePlace: document.getElementById("editUsagePlaceIn")?.value || currentIn.location || "",
     serialNo: currentIn.sid || "",
+    sid: currentIn.sid || "",
     nameJP: currentIn.nameJP || "",
     nameEN: currentIn.nameEN || "",
+    seiban: currentIn.seiban || "",
     model: currentIn.model || "",
+    drawing: currentIn.drawing || currentIn.code,
     quantity: qty,
     operator,
     reason
@@ -594,9 +562,6 @@ async function addStock() {
     const res = await postForm_(API_BASE, payload);
     if (res.status !== "ok") throw new Error(res.message || "入庫失敗");
 
-    await refreshHomeStats();
-    await renderHomeLogs();
-
     if (typeof res.stock === "number") {
       setText("itemStock", res.stock);
       setValue("editStockIn", res.stock);
@@ -604,10 +569,13 @@ async function addStock() {
     }
 
     await refreshHomeStats();
+    await renderHomeLogs();
+
     showMessage("✅ 入庫を記録しました。", true);
 
     currentIn = null;
     refreshInConfirmState();
+
   } catch (e) {
     console.error(e);
     showMessage(`❌ 入庫失敗：${e.message || e}`, false);
@@ -617,7 +585,7 @@ async function addStock() {
 }
 
 /* =========================
-   ✅ 新品入庫
+   新品入庫
 ========================= */
 async function addNewItem() {
   const qrData = currentIn || {};
@@ -626,46 +594,55 @@ async function addNewItem() {
   const nameJP = String(document.getElementById("newItemName")?.value || "").trim();
   const category = String(document.getElementById("newItemCategory")?.value || "").trim();
   const tana = String(document.getElementById("newItemTana")?.value || "").trim();
+  const location = String(document.getElementById("newItemLocation")?.value || "").trim();
   const qty = Number(document.getElementById("newItemQty")?.value || 0);
   const reason = String(document.getElementById("newItemNote")?.value || "").trim();
   const operator = getOperatorValue("operatorIn");
-  const nowTime = getNowTime();
 
   if (!operator) {
-   showOutMessage("❌ 請輸入庫人員名稱", false);
-   return;
+    showMessage("❌ 入庫人員を選択してください。", false);
+    return;
   }
+
   if (!code) {
     alert("請先掃描 QRCode");
     return;
   }
+
   if (!nameJP) {
     alert("請輸入 PartsName JP");
     return;
   }
+
   if (!Number.isFinite(qty) || qty <= 0) {
     alert("入庫數量必須 >= 1");
     return;
   }
 
+  if (!qrData.sid) {
+    alert("このQRコードはシリアル番号がありませんので、入荷しないでください。");
+    return;
+  }
+
   const payload = {
-  action: "stockIn",
-  type: "入庫(新規)",
-  code: code,
-  no: document.getElementById("editNoIn")?.value || "",
-  category: document.getElementById("editCategoryIn")?.value || "",
-  nameJP: document.getElementById("editNameJpIn")?.value || "",
-  seiban: document.getElementById("editSeibanIn")?.value || "",
-  nameEN: document.getElementById("editNameEnIn")?.value || "",
-  model: document.getElementById("editModelIn")?.value || "",
-  drawing: document.getElementById("editDrawingIn")?.value || code,
-  tana: document.getElementById("editTanaIn")?.value || "",
-  usagePlace: document.getElementById("editUsagePlaceIn")?.value || "",
-  quantity: qty,
-  operator: operator,
-  reason: reason,
-  sid: sid
-};
+    action: "stockIn",
+    type: "入庫(新規)",
+    code: code,
+    no: qrData.no || "",
+    category: category,
+    nameJP: nameJP,
+    nameEN: qrData.nameEN || "",
+    seiban: qrData.seiban || "",
+    model: qrData.model || "",
+    drawing: qrData.drawing || code,
+    tana: tana,
+    usagePlace: location,
+    quantity: qty,
+    operator: operator,
+    reason: reason,
+    serialNo: qrData.sid || "",
+    sid: qrData.sid || ""
+  };
 
   disableNewItemConfirm(true);
 
@@ -676,7 +653,6 @@ async function addNewItem() {
     await refreshHomeStats();
     await renderHomeLogs();
 
-    await refreshHomeStats();
     showMessage("✅ 新規備品を登録し、入庫を記録しました。", true);
 
     const newForm = document.getElementById("newItemForm");
@@ -686,11 +662,13 @@ async function addNewItem() {
     setValue("newItemName", "");
     setValue("newItemCategory", "");
     setValue("newItemTana", "");
+    setValue("newItemLocation", "");
     setValue("newItemQty", 1);
     setValue("newItemNote", "");
 
     currentIn = null;
     refreshInConfirmState();
+
   } catch (e) {
     console.error(e);
     showMessage(`❌ 新規入庫失敗：${e.message || e}`, false);
@@ -700,7 +678,7 @@ async function addNewItem() {
 }
 
 /* =========================
-   ✅ 出庫確定
+   出庫確定
 ========================= */
 async function submitStockOut() {
   if (!currentOut || !currentOut.code) {
@@ -716,28 +694,32 @@ async function submitStockOut() {
   const qty = Number(document.getElementById("stockOutQty")?.value || 0);
   const reason = String(document.getElementById("stockOutReason")?.value || "").trim();
   const operator = getOperatorValue("operatorOut");
-  const nowTime = getNowTime();
 
   if (!operator) {
-   showOutMessage("❌ 請輸入出庫人員名稱", false);
-   return;
+    showOutMessage("❌ 出庫人員を選択してください。", false);
+    return;
   }
+
   if (!Number.isFinite(qty) || qty <= 0) {
     alert("出庫數量必須 >= 1");
     return;
   }
 
   const payload = {
+    action: "stockOut",
     type: "出庫",
     code: currentOut.drawing || currentOut.code,
     no: currentOut.no || "",
     category: String(document.getElementById("editCategoryOut")?.value || currentOut.category || "").trim(),
     tana: String(document.getElementById("editTanaOut")?.value || currentOut.tana || "").trim(),
-    usagePlace: document.getElementById("editUsagePlaceIn")?.value || "",
+    usagePlace: document.getElementById("editUsagePlaceOut")?.value || currentOut.location || "",
     serialNo: currentOut.sid || "",
+    sid: currentOut.sid || "",
     nameJP: currentOut.nameJP || "",
     nameEN: currentOut.nameEN || "",
+    seiban: currentOut.seiban || "",
     model: currentOut.model || "",
+    drawing: currentOut.drawing || currentOut.code,
     quantity: qty,
     operator,
     reason
@@ -749,9 +731,6 @@ async function submitStockOut() {
     const res = await postForm_(API_BASE, payload);
     if (res.status !== "ok") throw new Error(res.message || "出庫失敗");
 
-    await refreshHomeStats();
-    await renderHomeLogs();
-
     if (typeof res.stock === "number") {
       setText("outItemStock", res.stock);
       setValue("editStockOut", res.stock);
@@ -759,10 +738,13 @@ async function submitStockOut() {
     }
 
     await refreshHomeStats();
+    await renderHomeLogs();
+
     showOutMessage("✅ 出庫を記録しました。", true);
 
     currentOut = null;
     refreshOutConfirmState();
+
   } catch (e) {
     console.error(e);
     showOutMessage(`❌ 出庫失敗：${e.message || e}`, false);
@@ -772,20 +754,16 @@ async function submitStockOut() {
 }
 
 /* =========================
-   UI：按鈕 disabled 控制
+   Button State
 ========================= */
-function getOperatorValue(id) {
-  const el = document.getElementById(id);
-  if (!el) return "";
-  return String(el.value || "").trim();
-}
-
 function refreshInConfirmState() {
-  const qty = Number(document.getElementById("stockInQty")?.value || 0);
+  const qty = Number(document.getElementById("stockInQty")?.value || document.getElementById("newItemQty")?.value || 0);
   const operator = getOperatorValue("operatorIn");
   const hasItem = !!(currentIn && currentIn.code);
   const ok = hasItem && operator && Number.isFinite(qty) && qty > 0;
+
   setBtnDisabledByOnclick("addStock()", !ok);
+  setBtnDisabledByOnclick("addNewItem()", !ok);
 }
 
 function refreshOutConfirmState() {
@@ -793,6 +771,7 @@ function refreshOutConfirmState() {
   const operator = getOperatorValue("operatorOut");
   const hasItem = !!(currentOut && currentOut.code);
   const ok = hasItem && operator && Number.isFinite(qty) && qty > 0;
+
   setBtnDisabledByOnclick("submitStockOut()", !ok);
 }
 
@@ -810,15 +789,15 @@ function disableOutConfirm(disabled) {
 }
 
 function disableNewItemConfirm(disabled) {
-  const btn = document.querySelector(`button[onclick="addNewItem()"]`);
-  if (btn) btn.disabled = !!disabled;
+  setBtnDisabledByOnclick("addNewItem()", !!disabled);
 }
 
 /* =========================
-   相機（QRCode + Code128）
+   Camera
 ========================= */
 function getFormatsToSupport() {
   if (typeof Html5QrcodeSupportedFormats === "undefined") return undefined;
+
   return [
     Html5QrcodeSupportedFormats.QR_CODE,
     Html5QrcodeSupportedFormats.CODE_128
@@ -845,6 +824,7 @@ async function stopAllCameras() {
 async function startInCamera() {
   const id = "inReader";
   const target = document.getElementById(id);
+
   if (!target) {
     alert("找不到 inReader");
     return;
@@ -856,6 +836,7 @@ async function startInCamera() {
   inHtml5Qrcode = new Html5Qrcode(id);
 
   const formats = getFormatsToSupport();
+
   const config = {
     fps: 10,
     qrbox: { width: 280, height: 280 },
@@ -867,7 +848,7 @@ async function startInCamera() {
     await inHtml5Qrcode.start(
       { facingMode: "environment" },
       config,
-      async (decodedText) => {
+      async decodedText => {
         console.log("[SCAN IN OK]", decodedText);
         await onScanInSuccess(decodedText);
         await stopScanner(inHtml5Qrcode);
@@ -884,6 +865,7 @@ async function startInCamera() {
 async function startOutCamera() {
   const id = "outReader";
   const target = document.getElementById(id);
+
   if (!target) {
     alert("找不到 outReader");
     return;
@@ -895,6 +877,7 @@ async function startOutCamera() {
   outHtml5Qrcode = new Html5Qrcode(id);
 
   const formats = getFormatsToSupport();
+
   const config = {
     fps: 10,
     qrbox: { width: 280, height: 280 },
@@ -906,7 +889,7 @@ async function startOutCamera() {
     await outHtml5Qrcode.start(
       { facingMode: "environment" },
       config,
-      async (decodedText) => {
+      async decodedText => {
         console.log("[SCAN OUT OK]", decodedText);
         await onScanOutSuccess(decodedText);
         await stopScanner(outHtml5Qrcode);
@@ -921,7 +904,7 @@ async function startOutCamera() {
 }
 
 /* =========================
-   ✅ POST helper（form-urlencoded）
+   POST helper
 ========================= */
 async function postForm_(url, payload) {
   const form = new URLSearchParams();
@@ -933,6 +916,7 @@ async function postForm_(url, payload) {
   });
 
   const text = await res.text();
+
   try {
     return JSON.parse(text);
   } catch {
@@ -941,12 +925,15 @@ async function postForm_(url, payload) {
 }
 
 /* =========================
-   事件綁定：輸入變更 → 刷新 disabled 狀態
+   Input Events
 ========================= */
 function bindInputEvents_() {
   const ids = [
-    "operatorIn", "stockInQty",
-    "operatorOut", "stockOutQty"
+    "operatorIn",
+    "stockInQty",
+    "newItemQty",
+    "operatorOut",
+    "stockOutQty"
   ];
 
   ids.forEach(id => {
@@ -966,27 +953,13 @@ function bindInputEvents_() {
 }
 
 /* =========================
-   初始化
-========================= */
-document.addEventListener("DOMContentLoaded", async () => {
-  renderHomeLogs();
-
-  await loadOperatorsTo("operatorIn");
-  await loadOperatorsTo("operatorOut");
-
-  bindInputEvents_();
-  refreshInConfirmState();
-  refreshOutConfirmState();
-
-  await refreshHomeStats();
-});
-
-/* =========================
-   🔍 搜尋備品（名稱 / Drawing）
+   搜尋備品
 ========================= */
 async function searchItem() {
   const keyword = document.getElementById("searchInput")?.value.trim();
   const resultBox = document.getElementById("searchResult");
+
+  if (!resultBox) return;
 
   if (!keyword) {
     resultBox.innerHTML = "請輸入搜尋內容";
@@ -996,8 +969,10 @@ async function searchItem() {
   resultBox.innerHTML = "搜尋中...";
 
   try {
-    // 👉 先用 Drawing NO 查
-    const res = await fetch(`${API_BASE}?action=item&code=${encodeURIComponent(keyword)}`);
+    const res = await fetch(`${API_BASE}?action=item&code=${encodeURIComponent(keyword)}&_t=${Date.now()}`, {
+      cache: "no-store"
+    });
+
     const data = await res.json();
 
     if (data && Object.keys(data).length > 0) {
@@ -1006,18 +981,17 @@ async function searchItem() {
           <b>✅ 在庫あり</b><br>
           名稱: ${escapeHtml(data["PartsName JP"] || "-")}<br>
           Drawing: ${escapeHtml(data["Drawing NO."] || "-")}<br>
-          在庫: <b>${data["Stock"] ?? 0}</b><br>
-          保管棚: ${escapeHtml(data["Tana"] || "-")}
+          在庫: <b>${escapeHtml(data["Stock"] ?? 0)}</b><br>
+          保管棚: ${escapeHtml(data["Tana"] || data["保管棚"] || "-")}<br>
+          使用場所: ${escapeHtml(data["使用場所"] || data["UsagePlace"] || "-")}
         </div>
       `;
       return;
     }
 
-    // 👉 如果找不到 → 用 logs 模糊搜尋名稱
     const logs = await fetchHomeLogs();
-
     const match = logs.find(l =>
-      (l.productName || "").toLowerCase().includes(keyword.toLowerCase())
+      String(l.productName || "").toLowerCase().includes(keyword.toLowerCase())
     );
 
     if (match) {
@@ -1066,20 +1040,12 @@ async function searchInventoryItems() {
 
   if (!keyword) {
     if (msg) msg.innerHTML = `<span style="color:red;">検索キーワードを入力してください。</span>`;
-    body.innerHTML = `
-      <div class="empty-message">
-          検索してください
-      </div>
-    `;
+    body.innerHTML = `<div class="empty-message">検索してください</div>`;
     return;
   }
 
   if (msg) msg.innerHTML = "検索中...";
-  body.innerHTML = `
-    <div class="empty-message">
-        検索中...
-    </div>
-  `;
+  body.innerHTML = `<div class="empty-message">検索中...</div>`;
 
   try {
     const url = `${API_BASE}?action=search_inventory&q=${encodeURIComponent(keyword)}&_t=${Date.now()}`;
@@ -1099,59 +1065,66 @@ async function searchInventoryItems() {
 
     const items = Array.isArray(data.items) ? data.items : [];
 
-    if (msg) {
-      msg.innerHTML = `検索結果：${items.length} 件`;
-    }
+    if (msg) msg.innerHTML = `検索結果：${items.length} 件`;
 
     if (!items.length) {
-  body.innerHTML = `
-    <div class="empty-message">
-      該当する備品はありません
-    </div>
-  `;
-  return;
-}
+      body.innerHTML = `<div class="empty-message">該当する備品はありません</div>`;
+      return;
+    }
 
     body.innerHTML = items.map(item => {
-  const stock = Number(item.stock || 0);
-  const stockClass = stock <= 0 ? "stock-zero" : "stock-ok";
+      const stock = Number(item.stock || 0);
+      const stockClass = stock <= 0 ? "stock-zero" : "stock-ok";
 
-  return `
-    <div class="search-card">
-      <div class="search-card-header">
-        <div class="item-name">${escapeHtml(item.nameJP || "-")}</div>
-        <div class="${stockClass}">在庫：${escapeHtml(item.stock)}</div>
-      </div>
+      return `
+        <div class="search-card">
+          <div class="search-card-header">
+            <div class="item-name">${escapeHtml(item.nameJP || "-")}</div>
+            <div class="${stockClass}">在庫：${escapeHtml(item.stock)}</div>
+          </div>
 
-      <div class="search-grid">
-        <div><span>Drawing NO.</span><b>${escapeHtml(item.drawingNo || "-")}</b></div>
-        <div><span>部品名</span><b>${escapeHtml(item.nameJP || "-")}</b></div>
-        <div><span>分類</span><b>${escapeHtml(item.category || "-")}</b></div>
-        <div><span>製番</span><b>${escapeHtml(item.seiban || "-")}</b></div>
-        <div><span>Model</span><b>${escapeHtml(item.model || "-")}</b></div>
-        <div><span>保管棚</span><b>${escapeHtml(item.tana || "-")}</b></div>
-        <div><span>使用場所</span><b>${escapeHtml(item.usagePlace || "-")}</b></div>
-        <div><span>入庫時間</span><b>${escapeHtml(item.time || "-")}</b></div>
-        <div><span>入庫者</span><b>${escapeHtml(item.lastOperator || "-")}</b></div>
-        <div><span>SafeStock</span><b>${escapeHtml(item.safeStock || "-")}</b></div>
-      </div>
-    </div>
-  `;
-}).join("");
+          <div class="search-grid">
+            <div><span>Drawing NO.</span><b>${escapeHtml(item.drawingNo || "-")}</b></div>
+            <div><span>部品名</span><b>${escapeHtml(item.nameJP || "-")}</b></div>
+            <div><span>分類</span><b>${escapeHtml(item.category || "-")}</b></div>
+            <div><span>製番</span><b>${escapeHtml(item.seiban || "-")}</b></div>
+            <div><span>Model</span><b>${escapeHtml(item.model || "-")}</b></div>
+            <div><span>保管棚</span><b>${escapeHtml(item.tana || "-")}</b></div>
+            <div><span>使用場所</span><b>${escapeHtml(item.usagePlace || "-")}</b></div>
+            <div><span>入庫時間</span><b>${escapeHtml(item.time || "-")}</b></div>
+            <div><span>入庫者</span><b>${escapeHtml(item.lastOperator || "-")}</b></div>
+            <div><span>SafeStock</span><b>${escapeHtml(item.safeStock || "-")}</b></div>
+          </div>
+        </div>
+      `;
+    }).join("");
 
   } catch (e) {
     console.error(e);
-    if (msg) msg.innerHTML = `<span style="color:red;">検索失敗：${escapeHtml(e.message || e)}</span>`;
-    body.innerHTML = `
-        <div class="empty-message">
-          検索失敗
-      </div>
-    `;
+
+    if (msg) {
+      msg.innerHTML = `<span style="color:red;">検索失敗：${escapeHtml(e.message || e)}</span>`;
+    }
+
+    body.innerHTML = `<div class="empty-message">検索失敗</div>`;
   }
 }
 
-/* Enter キーでも検索 */
-document.addEventListener("DOMContentLoaded", () => {
+/* =========================
+   初始化
+========================= */
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadOperatorsTo("operatorIn");
+  await loadOperatorsTo("operatorOut");
+
+  bindInputEvents_();
+
+  refreshInConfirmState();
+  refreshOutConfirmState();
+
+  await refreshHomeStats();
+  renderHomeLogs();
+
   const input = document.getElementById("inventorySearchInput");
   if (input) {
     input.addEventListener("keydown", e => {
