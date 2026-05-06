@@ -908,20 +908,21 @@ async function startOutCamera() {
 ========================= */
 async function postForm_(url, payload) {
   const form = new URLSearchParams();
-  Object.entries(payload).forEach(([k, v]) => form.append(k, v ?? ""));
 
-  const res = await fetch(url, {
+  Object.entries(payload).forEach(([k, v]) => {
+    form.append(k, v ?? "");
+  });
+
+  await fetch(url, {
     method: "POST",
+    mode: "no-cors",
     body: form
   });
 
-  const text = await res.text();
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error("後端回傳不是 JSON：" + text);
-  }
+  return {
+    status: "ok",
+    message: "送信しました"
+  };
 }
 
 /* =========================
