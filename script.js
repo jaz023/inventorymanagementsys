@@ -545,7 +545,6 @@ async function addStock() {
     tana: String(document.getElementById("editTanaIn")?.value || currentIn.tana || "").trim(),
     usagePlace: document.getElementById("editUsagePlaceIn")?.value || currentIn.location || "",
     serialNo: currentIn.sid || "",
-    sid: currentIn.sid || "",
     nameJP: currentIn.nameJP || "",
     nameEN: currentIn.nameEN || "",
     seiban: currentIn.seiban || "",
@@ -640,8 +639,7 @@ async function addNewItem() {
     quantity: qty,
     operator: operator,
     reason: reason,
-    serialNo: qrData.sid || "",
-    sid: qrData.sid || ""
+    serialNo: qrData.sid || ""
   };
 
   disableNewItemConfirm(true);
@@ -714,7 +712,6 @@ async function submitStockOut() {
     tana: String(document.getElementById("editTanaOut")?.value || currentOut.tana || "").trim(),
     usagePlace: document.getElementById("editUsagePlaceOut")?.value || currentOut.location || "",
     serialNo: currentOut.sid || "",
-    sid: currentOut.sid || "",
     nameJP: currentOut.nameJP || "",
     nameEN: currentOut.nameEN || "",
     seiban: currentOut.seiban || "",
