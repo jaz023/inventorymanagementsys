@@ -380,7 +380,7 @@ async function onScanInSuccess(decodedText) {
     tana: q.tana || item?.tana || "",
     location: q.location || item?.location || "",
     sid: q.sid,
-    stock: item?.stock || 0
+    stock: item? Number(item.stock || 0):0
   };
 
   const itemInfo = document.getElementById("itemInfo");
@@ -389,6 +389,14 @@ async function onScanInSuccess(decodedText) {
   if (item) {
     if (itemInfo) itemInfo.style.display = "block";
     if (newForm) newForm.style.display = "none";
+
+     console.log("[IN STOCK DEBUG]", {
+        code,
+        qrRaw,
+        q,
+        item,
+        currentInStock: currentIn.stock
+     });
 
     setText("itemName", currentIn.nameJP || code);
     setValue("editCategoryIn", currentIn.category || "");
@@ -910,16 +918,21 @@ async function postForm_(url, payload) {
     form.append(k, v ?? "");
   });
 
-  await fetch(url, {
+  const res = await fetch(url, {
     method: "POST",
-    mode: "no-cors",
     body: form
   });
 
-  return {
-    status: "ok",
-    message: "送信しました"
-  };
+  const text = await res.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("後端回傳不是 JSON：" + text.slice(0, 200));
+  }
+
+  return data;
 }
 
 /* =========================
@@ -1088,7 +1101,7 @@ async function searchInventoryItems() {
             <div><span>製番</span><b>${escapeHtml(item.seiban || "-")}</b></div>
             <div><span>Model</span><b>${escapeHtml(item.model || "-")}</b></div>
             <div><span>保管棚</span><b>${escapeHtml(item.tana || "-")}</b></div>
-            <div><span>使用場所</span><b>${escapeHtml(item.usagePlace || "-")}</b></div>
+            <div><span>使用場所</span><b>${escapeHtml(item.location || "-")}</b></div>
             <div><span>入庫時間</span><b>${escapeHtml(item.time || "-")}</b></div>
             <div><span>入庫者</span><b>${escapeHtml(item.lastOperator || "-")}</b></div>
             <div><span>SafeStock</span><b>${escapeHtml(item.safeStock || "-")}</b></div>
