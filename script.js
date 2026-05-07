@@ -1,7 +1,7 @@
 /* =========================
    ✅ 設定：改成你的 GAS Web App URL（/exec）
 ========================= */
-const API_BASE = "https://script.google.com/macros/s/AKfycbwSoD1JFU2oPlICj4MmmoU39gafORQv5cXzJR0JVHq97c_dcV13QZH9PlbyacK1oV_F/exec";
+const API_BASE = "https://script.google.com/macros/s/AKfycbxWrSPLy1xWPKcGi7Ltskk88e7Nlpqv4UnfGu4QEcEq6NgEtzkHSDVTPQ655T65U9mo/exec";
 
 /* =========================
    基本工具
