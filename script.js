@@ -402,6 +402,7 @@ async function onScanInSuccess(decodedText) {
     setValue("editCategoryIn", currentIn.category || "");
     setValue("editTanaIn", currentIn.tana || "");
     setValue("editUsagePlaceIn", currentIn.location || "");
+    setValue("editModelIn", currentIn.model || "");
     setText("itemStock", currentIn.stock);
     setValue("editStockIn", currentIn.stock);
 
@@ -556,7 +557,7 @@ async function addStock() {
     nameJP: currentIn.nameJP || "",
     nameEN: currentIn.nameEN || "",
     seiban: currentIn.seiban || "",
-    model: currentIn.model || "",
+    model: String(document.getElementById("editModelIn")?.value || currentIn.model || "").trim(),
     drawing: currentIn.drawing || currentIn.code,
     quantity: qty,
     operator,
@@ -602,6 +603,7 @@ async function addNewItem() {
   const category = String(document.getElementById("newItemCategory")?.value || "").trim();
   const tana = String(document.getElementById("newItemTana")?.value || "").trim();
   const location = String(document.getElementById("newItemLocation")?.value || "").trim();
+  const model = String(document.getElementById("newItemModel")?.value || "").trim();
   const qty = Number(document.getElementById("newItemQty")?.value || 0);
   const reason = String(document.getElementById("newItemNote")?.value || "").trim();
   const operator = getOperatorValue("operatorIn");
@@ -640,7 +642,7 @@ async function addNewItem() {
     nameJP: nameJP,
     nameEN: qrData.nameEN || "",
     seiban: qrData.seiban || "",
-    model: qrData.model || "",
+    model: model || qrData.model || "",
     drawing: qrData.drawing || code,
     tana: tana,
     usagePlace: location,
@@ -669,6 +671,7 @@ async function addNewItem() {
     setValue("newItemCategory", "");
     setValue("newItemTana", "");
     setValue("newItemLocation", "");
+    setValue("newItemModel", "");
     setValue("newItemQty", 1);
     setValue("newItemNote", "");
 
@@ -1074,24 +1077,88 @@ async function searchInventoryItems() {
       throw new Error(data?.message || "検索失敗");
     }
 
-    const items = Array.isArray(data.items) ? data.items : [];
+    const rawItems = Array.isArray(data.items) ? data.items : [];
 
-    if (msg) msg.innerHTML = `検索結果：${items.length} 件`;
-
-    if (!items.length) {
+    if (!rawItems.length) {
+      if (msg) msg.innerHTML = `検索結果：0 件`;
       body.innerHTML = `<div class="empty-message">該当する備品はありません</div>`;
       return;
+    }
+
+    const groupMap = {};
+
+    rawItems.forEach(item => {
+      const drawingNo = String(item.drawingNo || "").trim();
+      const tana = String(item.tana || "-").trim() || "-";
+      const key = `${drawingNo}||${tana}`;
+
+      if (!groupMap[key]) {
+        groupMap[key] = {
+          drawingNo,
+          tana,
+          nameJP: item.nameJP || "-",
+          category: item.category || "-",
+          seiban: item.seiban || "-",
+          model: item.model || "-",
+          location: item.location || "-",
+          safeStock: item.safeStock || "-",
+          lastOperator: item.lastOperator || "-",
+          lastInTime: item.time || item.lastInTime || "-",
+          stock: 0,
+          serials: []
+        };
+      }
+
+      const stock = Number(item.stock || 0);
+      groupMap[key].stock += stock;
+
+      const serial = String(item.serialNo || item.no || "").trim();
+      if (serial) {
+        groupMap[key].serials.push({
+          serial,
+          stock,
+          time: item.time || "-",
+          operator: item.lastOperator || "-"
+        });
+      }
+
+      if (!groupMap[key].location || groupMap[key].location === "-") {
+        groupMap[key].location = item.location || "-";
+      }
+
+      if (!groupMap[key].lastInTime || groupMap[key].lastInTime === "-") {
+        groupMap[key].lastInTime = item.time || item.lastInTime || "-";
+      }
+    });
+
+    const items = Object.values(groupMap).sort((a, b) => {
+      const d = String(a.drawingNo).localeCompare(String(b.drawingNo));
+      if (d !== 0) return d;
+      return String(a.tana).localeCompare(String(b.tana));
+    });
+
+    if (msg) {
+      msg.innerHTML = `検索結果：${items.length} 件（保管棚別）`;
     }
 
     body.innerHTML = items.map(item => {
       const stock = Number(item.stock || 0);
       const stockClass = stock <= 0 ? "stock-zero" : "stock-ok";
 
+      const serialList = item.serials.length
+        ? item.serials.map(s => `
+            <div style="margin-top:4px;">
+              <b>${escapeHtml(s.serial)}</b>
+              <span style="color:#666;"> / 在庫 ${escapeHtml(s.stock)}</span>
+            </div>
+          `).join("")
+        : "-";
+
       return `
         <div class="search-card">
           <div class="search-card-header">
             <div class="item-name">${escapeHtml(item.nameJP || "-")}</div>
-            <div class="${stockClass}">在庫：${escapeHtml(item.stock)}</div>
+            <div class="${stockClass}">在庫：${escapeHtml(stock)}</div>
           </div>
 
           <div class="search-grid">
@@ -1102,9 +1169,13 @@ async function searchInventoryItems() {
             <div><span>Model</span><b>${escapeHtml(item.model || "-")}</b></div>
             <div><span>保管棚</span><b>${escapeHtml(item.tana || "-")}</b></div>
             <div><span>使用場所</span><b>${escapeHtml(item.location || "-")}</b></div>
-            <div><span>入庫時間</span><b>${escapeHtml(item.time || "-")}</b></div>
+            <div><span>入庫時間</span><b>${escapeHtml(item.lastInTime || "-")}</b></div>
             <div><span>入庫者</span><b>${escapeHtml(item.lastOperator || "-")}</b></div>
             <div><span>SafeStock</span><b>${escapeHtml(item.safeStock || "-")}</b></div>
+            <div style="grid-column:1 / -1;">
+              <span>Serial No.</span>
+              <b>${serialList}</b>
+            </div>
           </div>
         </div>
       `;
