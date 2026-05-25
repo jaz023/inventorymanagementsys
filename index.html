@@ -13,7 +13,7 @@
 
 <div class="container">
 
-  <img src="sumitomo.png" class="logo" alt="Logo" />
+  <img src="images/sumitomo.png" class="logo" alt="Logo" />
 
   <h1>物料管理システムデモ</h1>
 
@@ -22,6 +22,7 @@
     <button type="button" onclick="showPage('stock-in')">入庫スキャン</button>
     <button type="button" onclick="showPage('stock-out')">出庫スキャン</button>
     <button type="button" onclick="showPage('search-page')">備品検索</button>
+    <button type="button" onclick="showPage('tool-page')">工具管理</button>
   </nav>
 
   <div id="home" class="page active">
@@ -111,6 +112,23 @@
       <input type="number" id="newItemQty" value="1" min="1" />
       <br />
 
+      <label>
+        <input type="checkbox" id="newItemSerialManaged" onchange="toggleNewItemPartSerials()" />
+        Serial管理品
+      </label>
+      <br />
+
+      <div id="newItemPartSerialBlock" style="display:none; margin-top:10px;">
+        <label for="newItemPartSerials">PartSerialNo（一行一個）:</label><br />
+        <textarea
+          id="newItemPartSerials"
+          rows="5"
+          style="width:100%;"
+          placeholder="例：&#10;AAA001&#10;AAA002&#10;AAA003"
+        ></textarea>
+      </div>
+      <br />
+
       <label for="newItemNote">使用原因 / 備註：</label>
       <input type="text" id="newItemNote" placeholder="例: 定期補貨" />
       <br /><br />
@@ -145,6 +163,17 @@
 
       <label for="stockInQty">入庫数量:</label>
       <input id="stockInQty" value="1" />
+      <br />
+
+      <div id="stockInPartSerialBlock" style="display:none; margin-top:10px;">
+        <label for="stockInPartSerials">PartSerialNo（一行一個）:</label><br />
+        <textarea
+          id="stockInPartSerials"
+          rows="5"
+          style="width:100%;"
+          placeholder="例：&#10;AAA001&#10;AAA002&#10;AAA003"
+        ></textarea>
+      </div>
       <br />
 
       <label for="stockInNote">使用理由：</label>
@@ -213,6 +242,17 @@
       <input id="stockOutQty" value="1" />
       <br />
 
+      <div id="stockOutPartSerialBlock" style="display:none; margin-top:10px;">
+       <label for="stockOutPartSerials">PartSerialNo（一行一個）:</label><br />
+       <textarea
+         id="stockOutPartSerials"
+         rows="5"
+         style="width:100%;"
+         placeholder="例：&#10;AAA001&#10;AAA002&#10;AAA003"
+       ></textarea>
+      </div>
+      <br />
+
       <label for="stockOutReason">使用原因:</label>
       <input type="text" id="stockOutReason" placeholder="例: 螺絲崩牙" />
       <br /><br />
@@ -247,6 +287,39 @@
       <div class="empty-message">検索してください</div>
     </div>
   </div>
+
+  <div id="tool-page" class="page">
+  <h2>工具管理 / 工具箱盤点</h2>
+
+  <h3>工具箱盤点模式</h3>
+
+  <button type="button" onclick="startToolBoxScan()">📦 掃描工具箱 QR</button>
+  <button type="button" onclick="startToolScan()">🔧 掃描工具 QR</button>
+  <button type="button" onclick="finishToolInventory()">✅ 完成盤点</button>
+
+  <div
+  id="toolReader"
+  style="
+    width:300px;
+    height:300px;
+    margin:16px auto 0 auto;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+  "
+  ></div>
+  <p>工具箱：<span id="currentBoxId">-</span></p>
+  <p>應有工具數：<span id="expectedToolCount">0</span></p>
+  <p>已掃描數：<span id="scannedToolCount">0</span></p>
+
+  <div id="toolInventoryMessage" style="margin-top:12px;"></div>
+
+  <h3>已掃描工具</h3>
+  <ul id="scannedToolList"></ul>
+
+  <h3>盤点結果</h3>
+  <div id="toolInventoryResult"></div>
+</div>
 
 </div>
 
