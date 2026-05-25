@@ -237,10 +237,42 @@ function normalizeQrFields(qr) {
     seiban: pickQrValue(qr, ["製番", "SEIBAN", "Seiban"]),
     model: pickQrValue(qr, ["MDL", "MODEL", "Model"]),
     drawing: pickQrValue(qr, ["DRW", "DRAWING", "Drawing NO.", "Drawing NO", "DrawingNO"]),
-    tana: pickQrValue(qr, ["TANA", "棚", "保管棚"]),
+    tana: pickQrValue(qr, ["TANA", "棚", "保管棚", "B"]),
     location: pickQrValue(qr, ["LOCATION", "Location", "使用場所", "PLACE", "UsagePlace"]),
-    sid: pickQrValue(qr, ["SID", "SN", "Serial"])
+    sid: pickQrValue(qr, ["SID", "SN", "Serial"]),
+    serialManaged: pickQrValue(qr, ["SM", "SerialManaged", "serialManaged"])
   };
+}
+
+function isSerialManaged_(value) {
+  const v = String(value || "").trim().toUpperCase();
+  return v === "YES" || v === "Y" || v === "1" || v === "TRUE";
+}
+
+function getPartSerialsFromTextarea_(id) {
+  return String(document.getElementById(id)?.value || "")
+    .split(/\r?\n|,|;/)
+    .map(x => x.trim())
+    .filter(Boolean);
+}
+
+function togglePartSerialBlock_(blockId, inputId, serialManaged) {
+  const block = document.getElementById(blockId);
+  const input = document.getElementById(inputId);
+
+  if (!block || !input) return;
+
+  if (isSerialManaged_(serialManaged)) {
+    block.style.display = "block";
+  } else {
+    block.style.display = "none";
+    input.value = "";
+  }
+}
+
+function toggleNewItemPartSerials() {
+  const checked = document.getElementById("newItemSerialManaged")?.checked;
+  togglePartSerialBlock_("newItemPartSerialBlock", "newItemPartSerials", checked ? "YES" : "NO");
 }
 
 function standardizeCode(qrObjOrRaw) {
@@ -336,10 +368,50 @@ async function fetchInventoryItem(code) {
 let currentIn = null;
 let currentOut = null;
 
+function resetInScanView_() {
+  currentIn = null;
+
+  setText("scanResult", "なし");
+  setText("scanSidIn", "-");
+  setText("itemName", "");
+  setText("itemStock", "");
+
+  setValue("editCategoryIn", "");
+  setValue("editTanaIn", "");
+  setValue("editUsagePlaceIn", "");
+  setValue("editModelIn", "");
+  setValue("stockInPartSerials", "");
+
+  togglePartSerialBlock_("stockInPartSerialBlock", "stockInPartSerials", "NO");
+
+  const itemInfo = document.getElementById("itemInfo");
+  if (itemInfo) itemInfo.style.display = "none";
+}
+
+function resetOutScanView_() {
+  currentOut = null;
+
+  setText("scanOutResult", "なし");
+  setText("scanSidOut", "-");
+  setText("outItemName", "");
+  setText("outItemStock", "");
+
+  setValue("editCategoryOut", "");
+  setValue("editTanaOut", "");
+  setValue("editUsagePlaceOut", "");
+  setValue("stockOutPartSerials", "");
+
+  togglePartSerialBlock_("stockOutPartSerialBlock", "stockOutPartSerials", "NO");
+
+  const outInfo = document.getElementById("outItemInfo");
+  if (outInfo) outInfo.style.display = "none";
+}
+
 /* =========================
    入庫：掃描成功
 ========================= */
 async function onScanInSuccess(decodedText) {
+  resetInScanView_();
   const operator = getOperatorValue("operatorIn");
   if (!operator) {
     showMessage("❌ 先にメンバー名前を選択してください。", false);
@@ -355,7 +427,7 @@ async function onScanInSuccess(decodedText) {
     return;
   }
 
-  setText("scanResult", code);
+  setText("scanResult", decodedText);
   setText("scanSidIn", q.sid || "-");
   showMessage("照合中...（Inventory 取得中）", true);
 
@@ -380,9 +452,15 @@ async function onScanInSuccess(decodedText) {
     tana: q.tana || item?.tana || "",
     location: q.location || item?.location || "",
     sid: q.sid,
-    stock: item? Number(item.stock || 0):0
+    serialManaged: q.serialManaged || "",
+    stock: item ? Number(item.stock || 0) : 0
   };
 
+  togglePartSerialBlock_(
+  "stockInPartSerialBlock",
+  "stockInPartSerials",
+  currentIn.serialManaged
+  );
   const itemInfo = document.getElementById("itemInfo");
   const newForm = document.getElementById("newItemForm");
 
@@ -419,6 +497,16 @@ async function onScanInSuccess(decodedText) {
     setValue("newItemLocation", currentIn.location);
     setValue("newItemQty", 1);
 
+    const newSerialChecked = isSerialManaged_(currentIn.serialManaged);
+    const newSerialCheckEl = document.getElementById("newItemSerialManaged");
+    if (newSerialCheckEl) newSerialCheckEl.checked = newSerialChecked;
+
+    togglePartSerialBlock_(
+      "newItemPartSerialBlock",
+      "newItemPartSerials",
+      newSerialChecked ? "YES" : "NO"
+    );
+
     showMessage("🆕 Inventory に存在しない新品です。QR資訊已自動帶入。", true);
   }
 
@@ -429,6 +517,7 @@ async function onScanInSuccess(decodedText) {
    出庫：掃描成功
 ========================= */
 async function onScanOutSuccess(decodedText) {
+  resetOutScanView_();
   const qrRaw = parseQrText(decodedText);
   const q = normalizeQrFields(qrRaw);
   const code = String(q.drawing || standardizeCode(qrRaw) || "").trim().toUpperCase();
@@ -438,7 +527,7 @@ async function onScanOutSuccess(decodedText) {
     return;
   }
 
-  setText("scanOutResult", code);
+  setText("scanOutResult", decodedText);
   setText("scanSidOut", q.sid || "-");
   showOutMessage("照合中...（Inventory 取得中）", true);
 
@@ -476,8 +565,15 @@ async function onScanOutSuccess(decodedText) {
     tana: q.tana || item.tana || "",
     location: q.location || item.location || "",
     sid: q.sid,
+    serialManaged: q.serialManaged || "",
     stock: item.stock
   };
+
+  togglePartSerialBlock_(
+  "stockOutPartSerialBlock",
+  "stockOutPartSerials",
+  currentOut.serialManaged
+  );
 
   const outInfo = document.getElementById("outItemInfo");
   if (outInfo) outInfo.style.display = "block";
@@ -512,6 +608,17 @@ function cancelNewItem() {
   setValue("newItemLocation", "");
   setValue("newItemQty", 1);
   setValue("newItemNote", "");
+  
+  const newSerialCheckEl = document.getElementById("newItemSerialManaged");
+  if (newSerialCheckEl) newSerialCheckEl.checked = false;
+
+  setValue("newItemPartSerials", "");
+
+  togglePartSerialBlock_(
+    "newItemPartSerialBlock",
+    "newItemPartSerials",
+    "NO"
+  );
 
   currentIn = null;
   refreshInConfirmState();
@@ -545,6 +652,15 @@ async function addStock() {
     return;
   }
 
+  const serialManaged = isSerialManaged_(currentIn.serialManaged) ? "YES" : "NO";
+  const partSerialsText = document.getElementById("stockInPartSerials")?.value || "";
+  const partSerials = getPartSerialsFromTextarea_("stockInPartSerials");
+
+  if (serialManaged === "YES" && partSerials.length !== qty) {
+    alert("PartSerialNo 數量必須和入庫數量一致");
+    return;
+  }
+
   const payload = {
     action: "stockIn",
     type: "入庫",
@@ -561,7 +677,9 @@ async function addStock() {
     drawing: currentIn.drawing || currentIn.code,
     quantity: qty,
     operator,
-    reason
+    reason,
+    serialManaged,
+    partSerials: partSerialsText
   };
 
   disableInConfirm(true);
@@ -581,7 +699,8 @@ async function addStock() {
 
     showMessage("✅ 入庫を記録しました。", true);
 
-    currentIn = null;
+    resetInScanView_();
+
     refreshInConfirmState();
 
   } catch (e) {
@@ -633,6 +752,15 @@ async function addNewItem() {
     return;
   }
 
+  const serialManaged = document.getElementById("newItemSerialManaged")?.checked ? "YES" : "NO";
+  const partSerialsText = document.getElementById("newItemPartSerials")?.value || "";
+  const partSerials = getPartSerialsFromTextarea_("newItemPartSerials");
+
+  if (serialManaged === "YES" && partSerials.length !== qty) {
+    alert("PartSerialNo 數量必須和入庫數量一致");
+    return;
+  }
+
   const payload = {
     action: "stockIn",
     type: "入庫(新規)",
@@ -649,7 +777,9 @@ async function addNewItem() {
     quantity: qty,
     operator: operator,
     reason: reason,
-    serialNo: qrData.sid || ""
+    serialNo: qrData.sid || "",
+    serialManaged: serialManaged,
+    partSerials: partSerialsText
   };
 
   disableNewItemConfirm(true);
@@ -714,6 +844,15 @@ async function submitStockOut() {
     return;
   }
 
+  const serialManaged = isSerialManaged_(currentOut.serialManaged) ? "YES" : "NO";
+  const partSerialsText = document.getElementById("stockOutPartSerials")?.value || "";
+  const partSerials = getPartSerialsFromTextarea_("stockOutPartSerials");
+
+  if (serialManaged === "YES" && partSerials.length !== qty) {
+    alert("PartSerialNo 數量必須和出庫數量一致");
+    return;
+  }
+
   const payload = {
     action: "stockOut",
     type: "出庫",
@@ -730,7 +869,9 @@ async function submitStockOut() {
     drawing: currentOut.drawing || currentOut.code,
     quantity: qty,
     operator,
-    reason
+    reason,
+    serialManaged,
+    partSerials: partSerialsText
   };
 
   disableOutConfirm(true);
@@ -750,7 +891,8 @@ async function submitStockOut() {
 
     showOutMessage("✅ 出庫を記録しました。", true);
 
-    currentOut = null;
+    resetOutScanView_();
+
     refreshOutConfirmState();
 
   } catch (e) {
@@ -814,6 +956,12 @@ function getFormatsToSupport() {
 
 let inHtml5Qrcode = null;
 let outHtml5Qrcode = null;
+let toolHtml5Qrcode = null;
+
+let toolInventoryMode = "";
+let currentToolBoxId = "";
+let expectedToolMap = {};
+let scannedToolIds = [];
 
 async function stopScanner(scanner) {
   if (!scanner) return;
@@ -827,6 +975,9 @@ async function stopAllCameras() {
 
   await stopScanner(outHtml5Qrcode);
   outHtml5Qrcode = null;
+
+  await stopScanner(toolHtml5Qrcode);
+  toolHtml5Qrcode = null;
 }
 
 async function startInCamera() {
@@ -1192,6 +1343,16 @@ async function searchInventoryItems() {
   }
 }
 
+
+function normalizeToolQr(qr) {
+  return {
+    type: pickQrValue(qr, ["TYPE", "Type", "type"]),
+    toolId: pickQrValue(qr, ["ToolID", "TOOLID", "toolId"]),
+    boxId: pickQrValue(qr, ["BoxID", "BOXID", "boxId"]),
+    tana: pickQrValue(qr, ["Tana", "TANA", "棚", "保管棚", "B"])
+  };
+}
+
 /* =========================
    初始化
 ========================= */
@@ -1216,3 +1377,230 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 });
+
+function showToolMessage(message, success = true) {
+  const el = document.getElementById("toolInventoryMessage");
+  if (!el) return;
+  el.innerHTML = `<p style="color:${success ? "green" : "red"};">${escapeHtml(message)}</p>`;
+}
+
+async function fetchToolsByBox(boxId) {
+  const url = `${API_BASE}?action=tool_box&boxId=${encodeURIComponent(boxId)}&_t=${Date.now()}`;
+  const res = await fetch(url, { cache: "no-store" });
+  const text = await res.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("tool_box 回傳不是 JSON：" + text.slice(0, 200));
+  }
+
+  if (!data || data.status !== "ok") {
+    throw new Error(data?.message || "tool_box 取得失敗");
+  }
+
+  return data;
+}
+
+async function startToolBoxScan() {
+  toolInventoryMode = "box";
+  await startToolCamera();
+  showToolMessage("工具箱 QR 掃描中...");
+}
+
+async function startToolScan() {
+  if (!currentToolBoxId) {
+    showToolMessage("請先掃描工具箱 QR。", false);
+    return;
+  }
+
+  toolInventoryMode = "tool";
+  await startToolCamera();
+  showToolMessage("工具 QR 掃描中...");
+}
+
+async function startToolCamera() {
+  const id = "toolReader";
+  const target = document.getElementById(id);
+
+  if (!target) {
+    alert("找不到 toolReader");
+    return;
+  }
+
+  await stopAllCameras();
+  target.innerHTML = "";
+
+  toolHtml5Qrcode = new Html5Qrcode(id);
+
+  const formats = getFormatsToSupport();
+
+  const config = {
+    fps: 10,
+    qrbox: { width: 280, height: 280 },
+    ...(formats ? { formatsToSupport: formats } : {}),
+    experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+  };
+
+  try {
+    await toolHtml5Qrcode.start(
+      { facingMode: "environment" },
+      config,
+      async decodedText => {
+        console.log("[TOOL SCAN OK]", decodedText);
+        await onToolScanSuccess(decodedText);
+        await stopScanner(toolHtml5Qrcode);
+        toolHtml5Qrcode = null;
+      },
+      () => {}
+    );
+  } catch (err) {
+    console.error(err);
+    alert("❌ 工具カメラ起動失敗: " + (err?.message || err));
+  }
+}
+
+async function onToolScanSuccess(decodedText) {
+  const qrRaw = parseQrText(decodedText);
+  const q = normalizeToolQr(qrRaw);
+
+  if (toolInventoryMode === "box") {
+    if (q.type !== "TOOLBOX" || !q.boxId) {
+      showToolMessage("これは工具箱 QR ではありません。TYPE=TOOLBOX と BoxID が必要です。", false);
+      return;
+    }
+
+    await loadToolBox(q.boxId);
+    return;
+  }
+
+  if (toolInventoryMode === "tool") {
+    if (q.type !== "TOOL" || !q.toolId) {
+      showToolMessage("これは工具 QR ではありません。TYPE=TOOL と ToolID が必要です。", false);
+      return;
+    }
+
+    addScannedTool(q.toolId, q.boxId);
+    return;
+  }
+}
+
+async function loadToolBox(boxId) {
+  try {
+    const data = await fetchToolsByBox(boxId);
+
+    currentToolBoxId = boxId;
+    expectedToolMap = {};
+    scannedToolIds = [];
+
+    (data.tools || []).forEach(t => {
+      const id = String(t.toolId || "").trim().toUpperCase();
+      if (id) expectedToolMap[id] = t;
+    });
+
+    setText("currentBoxId", boxId);
+    setText("expectedToolCount", Object.keys(expectedToolMap).length);
+    setText("scannedToolCount", "0");
+
+    renderScannedToolList();
+    document.getElementById("toolInventoryResult").innerHTML = "";
+
+    showToolMessage(`✅ 工具箱 ${boxId} 讀取完成，應有工具 ${Object.keys(expectedToolMap).length} 件。`, true);
+
+  } catch (e) {
+    console.error(e);
+    showToolMessage(`❌ 工具箱讀取失敗：${e.message || e}`, false);
+  }
+}
+
+function addScannedTool(toolId, qrBoxId) {
+  const id = String(toolId || "").trim().toUpperCase();
+
+  if (!id) {
+    showToolMessage("ToolID 空白。", false);
+    return;
+  }
+
+  if (qrBoxId && currentToolBoxId && String(qrBoxId).toUpperCase() !== String(currentToolBoxId).toUpperCase()) {
+    showToolMessage(`⚠️ ${id} 的 QR BoxID=${qrBoxId}，目前盤点箱=${currentToolBoxId}`, false);
+  }
+
+  if (!scannedToolIds.includes(id)) {
+    scannedToolIds.push(id);
+  }
+
+  setText("scannedToolCount", scannedToolIds.length);
+  renderScannedToolList();
+
+  if (expectedToolMap[id]) {
+    showToolMessage(`✅ 已掃描：${id}`, true);
+  } else {
+    showToolMessage(`⚠️ 多出工具：${id} 不屬於 ${currentToolBoxId}`, false);
+  }
+}
+
+function renderScannedToolList() {
+  const ul = document.getElementById("scannedToolList");
+  if (!ul) return;
+
+  if (!scannedToolIds.length) {
+    ul.innerHTML = "<li>尚未掃描工具</li>";
+    return;
+  }
+
+  ul.innerHTML = scannedToolIds.map(id => {
+    const ok = !!expectedToolMap[id];
+    return `<li style="color:${ok ? "green" : "red"};">${escapeHtml(id)} ${ok ? "" : "（多出）"}</li>`;
+  }).join("");
+}
+
+function finishToolInventory() {
+  if (!currentToolBoxId) {
+    showToolMessage("請先掃描工具箱 QR。", false);
+    return;
+  }
+
+  const expectedIds = Object.keys(expectedToolMap);
+  const scannedIds = scannedToolIds;
+
+  const missingIds = expectedIds.filter(id => !scannedIds.includes(id));
+  const extraIds = scannedIds.filter(id => !expectedToolMap[id]);
+  const borrowedTools = expectedIds
+    .map(id => expectedToolMap[id])
+    .filter(t => String(t.status || "").trim() === "借出");
+
+  const result = document.getElementById("toolInventoryResult");
+
+  result.innerHTML = `
+    <div style="border:1px solid #ccc; padding:10px;">
+      <p><b>工具箱：</b>${escapeHtml(currentToolBoxId)}</p>
+      <p><b>應有：</b>${expectedIds.length}</p>
+      <p><b>已掃：</b>${scannedIds.length}</p>
+      <p><b>缺少：</b>${missingIds.length}</p>
+      <p><b>多出：</b>${extraIds.length}</p>
+      <p><b>借出中：</b>${borrowedTools.length}</p>
+
+      <h4>缺少工具</h4>
+      ${missingIds.length ? missingIds.map(id => {
+        const t = expectedToolMap[id] || {};
+        return `<div style="color:red;">- ${escapeHtml(id)} ${escapeHtml(t.toolName || "")}</div>`;
+      }).join("") : "<div>無</div>"}
+
+      <h4>多出工具</h4>
+      ${extraIds.length ? extraIds.map(id => `
+        <div style="color:red;">- ${escapeHtml(id)}</div>
+      `).join("") : "<div>無</div>"}
+
+      <h4>借出中工具</h4>
+      ${borrowedTools.length ? borrowedTools.map(t => `
+        <div style="color:#d97706;">
+          - ${escapeHtml(t.toolId)} ${escapeHtml(t.toolName || "")}
+          / 借用者：${escapeHtml(t.borrower || "-")}
+        </div>
+      `).join("") : "<div>無</div>"}
+    </div>
+  `;
+
+  showToolMessage("✅ 盤点完成。", missingIds.length === 0 && extraIds.length === 0);
+}
