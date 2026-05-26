@@ -978,6 +978,9 @@ async function stopAllCameras() {
 
   await stopScanner(toolHtml5Qrcode);
   toolHtml5Qrcode = null;
+
+  await stopScanner(toolRentalHtml5Qrcode);
+  toolRentalHtml5Qrcode = null;
 }
 
 async function startInCamera() {
@@ -1347,9 +1350,62 @@ async function searchInventoryItems() {
 function normalizeToolQr(qr) {
   return {
     type: pickQrValue(qr, ["TYPE", "Type", "type"]),
-    toolId: pickQrValue(qr, ["ToolID", "TOOLID", "toolId"]),
-    boxId: pickQrValue(qr, ["BoxID", "BOXID", "boxId"]),
-    tana: pickQrValue(qr, ["Tana", "TANA", "棚", "保管棚", "B"])
+
+    toolId: pickQrValue(qr, [
+      "ToolID",
+      "TOOLID",
+      "toolId",
+      "ID"
+    ]),
+
+    sid: pickQrValue(qr, [
+      "SID",
+      "Sid",
+      "sid"
+    ]),
+
+    boxId: pickQrValue(qr, [
+      "BoxID",
+      "BOXID",
+      "boxId"
+    ]),
+
+    category: pickQrValue(qr, [
+      "CAT",
+      "CATEGORY",
+      "Category",
+      "分類"
+    ]),
+
+    boxName: pickQrValue(qr, [
+      "BoxName",
+      "BOXNAME",
+      "boxName",
+      "箱名",
+      "工具箱名稱"
+    ]),
+
+    toolName: pickQrValue(qr, [
+      "ToolName",
+      "TOOLNAME",
+      "NAME",
+      "Name",
+      "工具名稱"
+    ]),
+
+    tana: pickQrValue(qr, [
+      "Tana",
+      "TANA",
+      "棚",
+      "保管棚",
+      "B"
+    ]),
+
+    remark: pickQrValue(qr, [
+      "Remark",
+      "REMARK",
+      "備註"
+    ])
   };
 }
 
@@ -1603,4 +1659,315 @@ function finishToolInventory() {
   `;
 
   showToolMessage("✅ 盤点完成。", missingIds.length === 0 && extraIds.length === 0);
+}
+
+/* =========================
+   工具借出 / 返還
+========================= */
+let toolRentalHtml5Qrcode = null;
+let currentRentalTool = null;
+
+async function startToolRentalScan() {
+  const id = "toolRentalReader";
+  const target = document.getElementById(id);
+
+  if (!target) {
+    alert("找不到 toolRentalReader");
+    return;
+  }
+
+  await stopAllCameras();
+
+  target.innerHTML = "";
+  toolRentalHtml5Qrcode = new Html5Qrcode(id);
+
+  const formats = getFormatsToSupport();
+
+  const config = {
+    fps: 10,
+    qrbox: { width: 280, height: 280 },
+    ...(formats ? { formatsToSupport: formats } : {}),
+    experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+  };
+
+  try {
+    await toolRentalHtml5Qrcode.start(
+      { facingMode: "environment" },
+      config,
+      async decodedText => {
+        console.log("[TOOL RENTAL SCAN OK]", decodedText);
+        await onToolRentalScanSuccess(decodedText);
+        await stopScanner(toolRentalHtml5Qrcode);
+        toolRentalHtml5Qrcode = null;
+      },
+      () => {}
+    );
+  } catch (err) {
+    console.error(err);
+    showToolRentalMessage("❌ 工具借出/返還カメラ起動失敗：" + (err?.message || err), false);
+  }
+}
+
+async function onToolRentalScanSuccess(decodedText) {
+  const qrRaw = parseQrText(decodedText);
+  const q = normalizeToolQr(qrRaw);
+
+  const toolId = String(q.toolId || decodedText || "").trim();
+
+  if (!toolId) {
+    showToolRentalMessage("❌ ToolID を取得できません。", false);
+    return;
+  }
+
+  setText("rentalToolId", toolId);
+  setText("rentalToolName", "-");
+  setText("rentalToolStatus", "讀取中...");
+  currentRentalTool = null;
+
+  try {
+    const url = `${API_BASE}?action=tool_item&toolId=${encodeURIComponent(toolId)}&_t=${Date.now()}`;
+    const res = await fetch(url, { cache: "no-store" });
+    const text = await res.text();
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("tool_item 回傳不是 JSON：" + text.slice(0, 200));
+    }
+
+    if (!data || data.status !== "ok") {
+      const form = document.getElementById("newToolForm");
+        if (form) form.style.display = "block";
+
+        setText("newToolId", toolId);
+        setText("rentalToolId", toolId);
+        setText("rentalToolName", "-");
+        setText("rentalToolStatus", "未登錄");
+
+        setValue("newToolName", q.toolName || "");
+        setValue("newToolBoxId", q.boxId || "");
+        setValue("newToolBoxName", q.boxName || q.boxId || "");
+        setValue("newToolCategory", q.category || "");
+        setValue("newToolTana", q.tana || "");
+        setValue("newToolRemark", q.remark || "");
+
+        currentRentalTool = {
+          toolId,
+          sid: q.sid || "",
+          boxId: q.boxId || "",
+          boxName: q.boxName || q.boxId || "",
+          category: q.category || "",
+          toolName: q.toolName || "",
+          tana: q.tana || "",
+          remark: q.remark || ""
+        };
+
+        showToolRentalMessage("⚠️ 工具不存在，請先登錄。", false);
+        return;
+    }
+
+    currentRentalTool = data.tool || {};
+
+    setText("rentalToolId", currentRentalTool.toolId || toolId);
+    setText("rentalToolName", currentRentalTool.toolName || "-");
+    setText("rentalToolStatus", currentRentalTool.status || "-");
+
+    showToolRentalMessage("✅ 工具讀取成功。", true);
+
+  } catch (e) {
+    console.error(e);
+    showToolRentalMessage("❌ 工具讀取失敗：" + (e.message || e), false);
+  }
+}
+
+async function borrowToolAction() {
+  if (!currentRentalTool || !currentRentalTool.toolId) {
+    showToolRentalMessage("❌ 請先掃描工具 QR。", false);
+    return;
+  }
+
+  const borrower = String(document.getElementById("toolBorrower")?.value || "").trim();
+
+  if (!borrower) {
+    showToolRentalMessage("❌ 請輸入借用人。", false);
+    return;
+  }
+
+  try {
+    const res = await postForm_(API_BASE, {
+      action: "tool_borrow",
+      toolId: currentRentalTool.toolId,
+      borrower
+    });
+
+    if (res.status !== "ok") {
+      throw new Error(res.message || "借出失敗");
+    }
+
+    currentRentalTool.status = "借出";
+    currentRentalTool.borrower = borrower;
+
+    setText("rentalToolStatus", "借出");
+    showToolRentalMessage("✅ 借出成功。", true);
+
+  } catch (e) {
+    console.error(e);
+    showToolRentalMessage("❌ 借出失敗：" + (e.message || e), false);
+  }
+}
+
+async function returnToolAction() {
+  if (!currentRentalTool || !currentRentalTool.toolId) {
+    showToolRentalMessage("❌ 請先掃描工具 QR。", false);
+    return;
+  }
+
+  const borrower = String(document.getElementById("toolBorrower")?.value || "").trim();
+
+  if (!borrower) {
+    showToolRentalMessage("❌ 請輸入借用/返還人姓名。", false);
+    return;
+  }
+
+  try {
+    const res = await postForm_(API_BASE, {
+      action: "tool_return",
+      toolId: currentRentalTool.toolId,
+      borrower
+    });
+
+    if (res.status !== "ok") {
+      throw new Error(res.message || "返還失敗");
+    }
+
+    currentRentalTool.status = "在庫";
+    setText("rentalToolStatus", "在庫");
+    showToolRentalMessage("✅ 返還成功。", true);
+
+  } catch (e) {
+    console.error(e);
+    showToolRentalMessage("❌ 返還失敗：" + (e.message || e), false);
+  }
+}
+
+function showToolRentalMessage(message, success = true) {
+  const el = document.getElementById("toolRentalMessage");
+  if (!el) return;
+  el.innerHTML = `<p style="color:${success ? "green" : "red"};">${escapeHtml(message)}</p>`;
+}
+
+/* =========================
+   工具搜尋：目前先支援 ToolID 單筆查詢
+========================= */
+async function searchTools() {
+  const input = document.getElementById("toolSearchInput");
+  const result = document.getElementById("toolSearchResult");
+  const keyword = String(input?.value || "").trim();
+
+  if (!result) return;
+
+  if (!keyword) {
+    result.innerHTML = `<span style="color:red;">検索キーワードを入力してください。</span>`;
+    return;
+  }
+
+  result.innerHTML = "検索中...";
+
+  try {
+    const url = `${API_BASE}?action=tool_item&toolId=${encodeURIComponent(keyword)}&_t=${Date.now()}`;
+    const res = await fetch(url, { cache: "no-store" });
+    const text = await res.text();
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("tool_item 回傳不是 JSON：" + text.slice(0, 200));
+    }
+
+    if (!data || data.status !== "ok") {
+      result.innerHTML = `<span style="color:red;">該当する工具はありません。</span>`;
+      return;
+    }
+
+    const t = data.tool || {};
+
+    result.innerHTML = `
+      <div style="border:1px solid #ccc; padding:12px; margin-top:10px;">
+        <b>${escapeHtml(t.toolName || "-")}</b><br>
+        ToolID：${escapeHtml(t.toolId || "-")}<br>
+        SID：${escapeHtml(t.sid || "-")}<br>
+        BoxID：${escapeHtml(t.boxId || "-")}<br>
+        保管棚：${escapeHtml(t.tana || "-")}<br>
+        狀態：<b>${escapeHtml(t.status || "-")}</b><br>
+        借用人：${escapeHtml(t.borrower || "-")}
+      </div>
+    `;
+
+  } catch (e) {
+    console.error(e);
+    result.innerHTML = `<span style="color:red;">検索失敗：${escapeHtml(e.message || e)}</span>`;
+  }
+}
+
+async function registerNewToolAction() {
+  const toolId = String(document.getElementById("newToolId")?.textContent || "").trim();
+  const toolName = String(document.getElementById("newToolName")?.value || "").trim();
+  const boxId = String(document.getElementById("newToolBoxId")?.value || "").trim();
+  const boxName = String(document.getElementById("newToolBoxName")?.value || boxId || "").trim();
+  const category = String(document.getElementById("newToolCategory")?.value || "").trim();
+  const sid = String(currentRentalTool?.sid || "").trim();
+  const tana = String(document.getElementById("newToolTana")?.value || "").trim();
+  const remark = String(document.getElementById("newToolRemark")?.value || "").trim();
+
+  if (!toolId || toolId === "-") {
+    showToolRentalMessage("❌ ToolID 不明。請先掃描工具 QR。", false);
+    return;
+  }
+
+  if (!toolName) {
+    showToolRentalMessage("❌ 請輸入工具名稱。", false);
+    return;
+  }
+
+  try {
+    const res = await postForm_(API_BASE, {
+      action: "tool_register",
+      toolId,
+      sid,
+      toolName,
+      boxId,
+      boxName,
+      category,
+      tana,
+      remark
+    });
+
+    if (res.status !== "ok") {
+      throw new Error(res.message || "工具登錄失敗");
+    }
+
+    currentRentalTool = res.tool || {
+      toolId,
+      toolName,
+      boxId,
+      category,
+      tana,
+      status: "在庫"
+    };
+
+    setText("rentalToolId", toolId);
+    setText("rentalToolName", toolName);
+    setText("rentalToolStatus", "在庫");
+
+    const form = document.getElementById("newToolForm");
+    if (form) form.style.display = "none";
+
+    showToolRentalMessage("✅ 工具登錄完成。", true);
+
+  } catch (e) {
+    console.error(e);
+    showToolRentalMessage("❌ 工具登錄失敗：" + (e.message || e), false);
+  }
 }
