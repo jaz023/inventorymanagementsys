@@ -289,41 +289,110 @@
   </div>
 
   <div id="tool-page" class="page">
-  <h2>工具管理 / 工具箱盤点</h2>
 
-  <h3>工具箱盤点模式</h3>
+  <h2>工具管理システム</h2>
 
-  <button type="button" onclick="startToolBoxScan()">📦 掃描工具箱 QR</button>
-  <button type="button" onclick="startToolScan()">🔧 掃描工具 QR</button>
-  <button type="button" onclick="finishToolInventory()">✅ 完成盤点</button>
+  <!-- 借出返還 -->
+  <div class="tool-section">
 
-  <div
-  id="toolReader"
-  style="
-    width:300px;
-    height:300px;
-    margin:16px auto 0 auto;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-  "
-  ></div>
-  <p>工具箱：<span id="currentBoxId">-</span></p>
-  <p>應有工具數：<span id="expectedToolCount">0</span></p>
-  <p>已掃描數：<span id="scannedToolCount">0</span></p>
+    <h3>工具借出 / 返還</h3>
 
-  <div id="toolInventoryMessage" style="margin-top:12px;"></div>
+    <button type="button" onclick="startToolRentalScan()">
+      掃描工具 QR
+    </button>
 
-  <h3>已掃描工具</h3>
-  <ul id="scannedToolList"></ul>
+    <div id="toolRentalReader"
+      style="
+        width:300px;
+        height:300px;
+        margin:16px auto;
+      "
+    ></div>
 
-  <h3>盤点結果</h3>
-  <div id="toolInventoryResult"></div>
-</div>
+    <p>ToolID：<span id="rentalToolId">-</span></p>
+    <p>工具名稱：<span id="rentalToolName">-</span></p>
+    <p>目前狀態：<span id="rentalToolStatus">-</span></p>
 
-</div>
+    <label>借用人：</label>
+    <input
+      type="text"
+      id="toolBorrower"
+      placeholder="例：Jason"
+    />
+
+    <br /><br />
+
+    <button type="button" onclick="borrowToolAction()">
+      借出
+    </button>
+
+    <button type="button" onclick="returnToolAction()">
+      返還
+    </button>
+
+    <div id="newToolForm" style="display:none; margin-top:24px; border:1px solid #ccc; padding:16px;">
+      <h3>新規工具登錄</h3>
+
+      <p>ToolID：<span id="newToolId">-</span></p>
+
+      <label>工具名稱：</label>
+      <input type="text" id="newToolName" placeholder="例：六角レンチ" />
+      <br /><br />
+
+      <label>工具箱 BoxID：</label>
+      <input type="text" id="newToolBoxId" placeholder="例：BOX-A" />
+      <br /><br />
+
+      <label>分類：</label>
+      <input type="text" id="newToolCategory" placeholder="例：手工具" />
+      <br /><br />
+
+      <label>保管棚：</label>
+      <input type="text" id="newToolTana" placeholder="例：A1" />
+      <br /><br />
+
+      <label>工具箱名稱：</label>
+      <input type="text" id="newToolBoxName" placeholder="例：工具箱A" />
+      <br /><br />
+
+      <label>備註：</label>
+      <input type="text" id="newToolRemark" placeholder="例：新規登録" />
+      <br /><br />
+
+      <button type="button" onclick="registerNewToolAction()">工具登錄</button>
+    </div>
+
+    <div id="toolRentalMessage" style="margin-top:12px;"></div>
+
+  </div>
+
+  <hr style="margin:32px 0;">
+
+  <!-- 工具搜尋 -->
+  <div class="tool-section">
+
+    <h3>工具搜尋</h3>
+
+    <input
+      type="text"
+      id="toolSearchInput"
+      placeholder="ToolID / SID / BoxID / 工具名 / 借用人"
+      style="
+        width:70%;
+        padding:10px;
+      "
+    />
+
+    <button type="button" onclick="searchTools()">
+      検索
+    </button>
+
+    <div id="toolSearchResult" style="margin-top:16px;"></div>
+
+  </div>
+
+  </div>
 
 <script src="script.js"></script>
-
 </body>
 </html>
