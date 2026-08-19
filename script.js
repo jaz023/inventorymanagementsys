@@ -3,6 +3,7 @@
 ========================= */
 const API_BASE = "https://script.google.com/macros/s/AKfycbxWrSPLy1xWPKcGi7Ltskk88e7Nlpqv4UnfGu4QEcEq6NgEtzkHSDVTPQ655T65U9mo/exec";
 
+const IS_DEMO_MODE = new URLSearchParams(location.search).get("demo") === "1" || location.protocol === "file:";
 /* =========================
    基本工具
 ========================= */
@@ -40,6 +41,14 @@ function getOperatorValue(id) {
   return String(el.value || "").trim();
 }
 
+function displayToolStatus_(status) {
+  const value = String(status || "").trim();
+  if (value === "借出" || value === "借出中") return "貸出中";
+  if (value === "已歸還") return "返却済み";
+  if (value === "未登錄") return "未登録";
+  return value || "-";
+}
+
 /* =========================
    Home Logs
 ========================= */
@@ -58,7 +67,7 @@ async function fetchHomeLogs() {
   }
 
   if (!data || data.status !== "ok") {
-    throw new Error(data?.message || "讀取 logs 失敗");
+    throw new Error(data?.message || "履歴の読み込みに失敗しました");
   }
 
   return Array.isArray(data.logs) ? data.logs : [];
@@ -70,7 +79,7 @@ async function renderHomeLogs() {
 
   tbody.innerHTML = `
     <tr>
-      <td colspan="6" style="text-align:center; color:#666;">讀取中...</td>
+      <td colspan="6" style="text-align:center; color:#666;">読み込み中...</td>
     </tr>
   `;
 
@@ -103,7 +112,7 @@ async function renderHomeLogs() {
     console.error(e);
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align:center; color:red;">讀取失敗</td>
+        <td colspan="6" style="text-align:center; color:red;">読み込みに失敗しました</td>
       </tr>
     `;
   }
@@ -160,6 +169,14 @@ async function showPage(pageId) {
 
   if (pageId === "search-page") {
     clearInventorySearchResult();
+  }
+
+  if (pageId === "history-page") {
+    await searchStockHistory();
+  }
+
+  if (pageId === "tool-page") {
+    await searchRentalHistory();
   }
 
   if (pageId === "sidTracker") {
@@ -344,7 +361,7 @@ async function fetchInventoryItem(code) {
       url,
       text: text.slice(0, 300)
     });
-    throw new Error("後端回傳不是 JSON（請檢查 GAS WebApp 部署/權限/URL）");
+    throw new Error("サーバー応答がJSONではありません（GAS Web Appのデプロイ、権限、URLを確認してください）");
   }
 
   if (!data || Object.keys(data).length === 0) return null;
@@ -423,7 +440,7 @@ async function onScanInSuccess(decodedText) {
   const code = String(q.drawing || standardizeCode(qrRaw) || "").trim().toUpperCase();
 
   if (!code) {
-    showMessage("QRCode 內容無法識別（缺少 DRW / Drawing NO.）", false);
+    showMessage("QRコードを識別できません（DRW / Drawing NO. がありません）", false);
     return;
   }
 
@@ -484,7 +501,7 @@ async function onScanInSuccess(decodedText) {
     setText("itemStock", currentIn.stock);
     setValue("editStockIn", currentIn.stock);
 
-    showMessage("✅ 入庫対象を取得しました。QR資訊已自動帶入。", true);
+    showMessage("✅ 入庫対象を取得しました。QR情報を自動入力しました。", true);
 
   } else {
     if (itemInfo) itemInfo.style.display = "none";
@@ -507,7 +524,7 @@ async function onScanInSuccess(decodedText) {
       newSerialChecked ? "YES" : "NO"
     );
 
-    showMessage("🆕 Inventory に存在しない新品です。QR資訊已自動帶入。", true);
+    showMessage("🆕 Inventory に存在しない新規品です。QR情報を自動入力しました。", true);
   }
 
   refreshInConfirmState();
@@ -523,7 +540,7 @@ async function onScanOutSuccess(decodedText) {
   const code = String(q.drawing || standardizeCode(qrRaw) || "").trim().toUpperCase();
 
   if (!code) {
-    showOutMessage("QRCode 內容無法識別（缺少 DRW / Drawing NO.）", false);
+    showOutMessage("QRコードを識別できません（DRW / Drawing NO. がありません）", false);
     return;
   }
 
@@ -585,7 +602,7 @@ async function onScanOutSuccess(decodedText) {
   setText("outItemStock", currentOut.stock);
   setValue("editStockOut", currentOut.stock);
 
-  showOutMessage("✅ 出庫対象を取得しました。QR資訊已自動帶入。", true);
+  showOutMessage("✅ 出庫対象を取得しました。QR情報を自動入力しました。", true);
 
   setTimeout(() => document.getElementById("stockOutQty")?.focus(), 200);
   refreshOutConfirmState();
@@ -643,12 +660,12 @@ async function addStock() {
   const operator = getOperatorValue("operatorIn");
 
   if (!operator) {
-    showMessage("❌ 入庫人員を選択してください。", false);
+    showMessage("❌ 入庫担当者を選択してください。", false);
     return;
   }
 
   if (!Number.isFinite(qty) || qty <= 0) {
-    alert("入庫數量必須 >= 1");
+    alert("入庫数量は1以上で指定してください。");
     return;
   }
 
@@ -657,7 +674,7 @@ async function addStock() {
   const partSerials = getPartSerialsFromTextarea_("stockInPartSerials");
 
   if (serialManaged === "YES" && partSerials.length !== qty) {
-    alert("PartSerialNo 數量必須和入庫數量一致");
+    alert("PartSerialNoの件数は入庫数量と一致させてください。");
     return;
   }
 
@@ -705,7 +722,7 @@ async function addStock() {
 
   } catch (e) {
     console.error(e);
-    showMessage(`❌ 入庫失敗：${e.message || e}`, false);
+    showMessage(`❌ 入庫に失敗しました：${e.message || e}`, false);
   } finally {
     disableInConfirm(false);
   }
@@ -728,22 +745,22 @@ async function addNewItem() {
   const operator = getOperatorValue("operatorIn");
 
   if (!operator) {
-    showMessage("❌ 入庫人員を選択してください。", false);
+    showMessage("❌ 入庫担当者を選択してください。", false);
     return;
   }
 
   if (!code) {
-    alert("請先掃描 QRCode");
+    alert("先にQRコードをスキャンしてください。");
     return;
   }
 
   if (!nameJP) {
-    alert("請輸入 PartsName JP");
+    alert("PartsName JPを入力してください。");
     return;
   }
 
   if (!Number.isFinite(qty) || qty <= 0) {
-    alert("入庫數量必須 >= 1");
+    alert("入庫数量は1以上で指定してください。");
     return;
   }
 
@@ -757,7 +774,7 @@ async function addNewItem() {
   const partSerials = getPartSerialsFromTextarea_("newItemPartSerials");
 
   if (serialManaged === "YES" && partSerials.length !== qty) {
-    alert("PartSerialNo 數量必須和入庫數量一致");
+    alert("PartSerialNoの件数は入庫数量と一致させてください。");
     return;
   }
 
@@ -786,7 +803,7 @@ async function addNewItem() {
 
   try {
     const res = await postForm_(API_BASE, payload);
-    if (res.status !== "ok") throw new Error(res.message || "新增入庫失敗");
+    if (res.status !== "ok") throw new Error(res.message || "新規入庫に失敗しました");
 
     await refreshHomeStats();
     await renderHomeLogs();
@@ -810,7 +827,7 @@ async function addNewItem() {
 
   } catch (e) {
     console.error(e);
-    showMessage(`❌ 新規入庫失敗：${e.message || e}`, false);
+    showMessage(`❌ 新規入庫に失敗しました：${e.message || e}`, false);
   } finally {
     disableNewItemConfirm(false);
   }
@@ -835,12 +852,12 @@ async function submitStockOut() {
   const operator = getOperatorValue("operatorOut");
 
   if (!operator) {
-    showOutMessage("❌ 出庫人員を選択してください。", false);
+    showOutMessage("❌ 出庫担当者を選択してください。", false);
     return;
   }
 
   if (!Number.isFinite(qty) || qty <= 0) {
-    alert("出庫數量必須 >= 1");
+    alert("出庫数量は1以上で指定してください。");
     return;
   }
 
@@ -849,7 +866,7 @@ async function submitStockOut() {
   const partSerials = getPartSerialsFromTextarea_("stockOutPartSerials");
 
   if (serialManaged === "YES" && partSerials.length !== qty) {
-    alert("PartSerialNo 數量必須和出庫數量一致");
+    alert("PartSerialNoの件数は出庫数量と一致させてください。");
     return;
   }
 
@@ -897,7 +914,7 @@ async function submitStockOut() {
 
   } catch (e) {
     console.error(e);
-    showOutMessage(`❌ 出庫失敗：${e.message || e}`, false);
+    showOutMessage(`❌ 出庫に失敗しました：${e.message || e}`, false);
   } finally {
     disableOutConfirm(false);
   }
@@ -1130,11 +1147,11 @@ async function searchItem() {
   if (!resultBox) return;
 
   if (!keyword) {
-    resultBox.innerHTML = "請輸入搜尋內容";
+    resultBox.innerHTML = "検索キーワードを入力してください";
     return;
   }
 
-  resultBox.innerHTML = "搜尋中...";
+  resultBox.innerHTML = "検索中...";
 
   try {
     const res = await fetch(`${API_BASE}?action=item&code=${encodeURIComponent(keyword)}&_t=${Date.now()}`, {
@@ -1147,7 +1164,7 @@ async function searchItem() {
       resultBox.innerHTML = `
         <div style="border:1px solid #ccc; padding:10px;">
           <b>✅ 在庫あり</b><br>
-          名稱: ${escapeHtml(data["PartsName JP"] || "-")}<br>
+          品名: ${escapeHtml(data["PartsName JP"] || "-")}<br>
           Drawing: ${escapeHtml(data["Drawing NO."] || "-")}<br>
           在庫: <b>${escapeHtml(data["Stock"] ?? 0)}</b><br>
           保管棚: ${escapeHtml(data["Tana"] || data["保管棚"] || "-")}<br>
@@ -1165,25 +1182,27 @@ async function searchItem() {
     if (match) {
       resultBox.innerHTML = `
         <div style="border:1px solid #ccc; padding:10px;">
-          <b>⚠️ 曾經出現（請確認庫存）</b><br>
-          名稱: ${escapeHtml(match.productName)}<br>
-          最近動作: ${escapeHtml(match.type)}<br>
+          <b>⚠️ 過去の履歴にあります（在庫を確認してください）</b><br>
+          品名: ${escapeHtml(match.productName)}<br>
+          最終操作: ${escapeHtml(match.type)}<br>
           時間: ${escapeHtml(match.timeText)}
         </div>
       `;
     } else {
-      resultBox.innerHTML = `<span style="color:red;">❌ 找不到此備品</span>`;
+      resultBox.innerHTML = `<span style="color:red;">❌ 該当する備品が見つかりません</span>`;
     }
 
   } catch (e) {
     console.error(e);
-    resultBox.innerHTML = "搜尋失敗";
+    resultBox.innerHTML = "検索に失敗しました";
   }
 }
 
 /* =========================
    備品検索：模糊搜尋 Inventory
 ========================= */
+let inventorySearchController = null;
+
 function clearInventorySearchResult() {
   const msg = document.getElementById("inventorySearchMessage");
   const body = document.getElementById("inventorySearchBody");
@@ -1216,8 +1235,10 @@ async function searchInventoryItems() {
   body.innerHTML = `<div class="empty-message">検索中...</div>`;
 
   try {
+    if (inventorySearchController) inventorySearchController.abort();
+    inventorySearchController = new AbortController();
     const url = `${API_BASE}?action=search_inventory&q=${encodeURIComponent(keyword)}&_t=${Date.now()}`;
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, { cache: "no-store", signal: inventorySearchController.signal });
     const text = await res.text();
 
     let data;
@@ -1235,7 +1256,7 @@ async function searchInventoryItems() {
 
     if (!rawItems.length) {
       if (msg) msg.innerHTML = `検索結果：0 件`;
-      body.innerHTML = `<div class="empty-message">該当する備品はありません</div>`;
+      body.innerHTML = `<div class="empty-message">該当する備品がありません</div>`;
       return;
     }
 
@@ -1336,6 +1357,7 @@ async function searchInventoryItems() {
     }).join("");
 
   } catch (e) {
+    if (e && e.name === "AbortError") return;
     console.error(e);
 
     if (msg) {
@@ -1426,8 +1448,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const input = document.getElementById("inventorySearchInput");
   if (input) {
+    let fuzzySearchTimer = null;
+    input.addEventListener("input", () => {
+      clearTimeout(fuzzySearchTimer);
+      const keyword = String(input.value || "").trim();
+      if (!keyword) {
+        clearInventorySearchResult();
+        return;
+      }
+      fuzzySearchTimer = setTimeout(() => searchInventoryItems(), 220);
+    });
     input.addEventListener("keydown", e => {
       if (e.key === "Enter") {
+        clearTimeout(fuzzySearchTimer);
         searchInventoryItems();
       }
     });
@@ -1453,7 +1486,7 @@ async function fetchToolsByBox(boxId) {
   }
 
   if (!data || data.status !== "ok") {
-    throw new Error(data?.message || "tool_box 取得失敗");
+    throw new Error(data?.message || "工具箱データの取得に失敗しました");
   }
 
   return data;
@@ -1462,18 +1495,18 @@ async function fetchToolsByBox(boxId) {
 async function startToolBoxScan() {
   toolInventoryMode = "box";
   await startToolCamera();
-  showToolMessage("工具箱 QR 掃描中...");
+  showToolMessage("工具箱QRをスキャン中...");
 }
 
 async function startToolScan() {
   if (!currentToolBoxId) {
-    showToolMessage("請先掃描工具箱 QR。", false);
+    showToolMessage("先に工具箱QRをスキャンしてください。", false);
     return;
   }
 
   toolInventoryMode = "tool";
   await startToolCamera();
-  showToolMessage("工具 QR 掃描中...");
+  showToolMessage("工具QRをスキャン中...");
 }
 
 async function startToolCamera() {
@@ -1562,11 +1595,11 @@ async function loadToolBox(boxId) {
     renderScannedToolList();
     document.getElementById("toolInventoryResult").innerHTML = "";
 
-    showToolMessage(`✅ 工具箱 ${boxId} 讀取完成，應有工具 ${Object.keys(expectedToolMap).length} 件。`, true);
+    showToolMessage(`✅ 工具箱 ${boxId} を読み込みました。登録工具：${Object.keys(expectedToolMap).length} 件`, true);
 
   } catch (e) {
     console.error(e);
-    showToolMessage(`❌ 工具箱讀取失敗：${e.message || e}`, false);
+    showToolMessage(`❌ 工具箱の読み込みに失敗しました：${e.message || e}`, false);
   }
 }
 
@@ -1590,9 +1623,9 @@ function addScannedTool(toolId, qrBoxId) {
   renderScannedToolList();
 
   if (expectedToolMap[id]) {
-    showToolMessage(`✅ 已掃描：${id}`, true);
+    showToolMessage(`✅ スキャン済み：${id}`, true);
   } else {
-    showToolMessage(`⚠️ 多出工具：${id} 不屬於 ${currentToolBoxId}`, false);
+    showToolMessage(`⚠️ 余分な工具：${id} は ${currentToolBoxId} に属しません`, false);
   }
 }
 
@@ -1601,19 +1634,19 @@ function renderScannedToolList() {
   if (!ul) return;
 
   if (!scannedToolIds.length) {
-    ul.innerHTML = "<li>尚未掃描工具</li>";
+    ul.innerHTML = "<li>まだ工具をスキャンしていません</li>";
     return;
   }
 
   ul.innerHTML = scannedToolIds.map(id => {
     const ok = !!expectedToolMap[id];
-    return `<li style="color:${ok ? "green" : "red"};">${escapeHtml(id)} ${ok ? "" : "（多出）"}</li>`;
+    return `<li style="color:${ok ? "green" : "red"};">${escapeHtml(id)} ${ok ? "" : "（余分）"}</li>`;
   }).join("");
 }
 
 function finishToolInventory() {
   if (!currentToolBoxId) {
-    showToolMessage("請先掃描工具箱 QR。", false);
+    showToolMessage("先に工具箱QRをスキャンしてください。", false);
     return;
   }
 
@@ -1631,34 +1664,34 @@ function finishToolInventory() {
   result.innerHTML = `
     <div style="border:1px solid #ccc; padding:10px;">
       <p><b>工具箱：</b>${escapeHtml(currentToolBoxId)}</p>
-      <p><b>應有：</b>${expectedIds.length}</p>
-      <p><b>已掃：</b>${scannedIds.length}</p>
-      <p><b>缺少：</b>${missingIds.length}</p>
-      <p><b>多出：</b>${extraIds.length}</p>
-      <p><b>借出中：</b>${borrowedTools.length}</p>
+      <p><b>登録数：</b>${expectedIds.length}</p>
+      <p><b>スキャン数：</b>${scannedIds.length}</p>
+      <p><b>不足：</b>${missingIds.length}</p>
+      <p><b>余分：</b>${extraIds.length}</p>
+      <p><b>貸出中：</b>${borrowedTools.length}</p>
 
-      <h4>缺少工具</h4>
+      <h4>不足工具</h4>
       ${missingIds.length ? missingIds.map(id => {
         const t = expectedToolMap[id] || {};
         return `<div style="color:red;">- ${escapeHtml(id)} ${escapeHtml(t.toolName || "")}</div>`;
-      }).join("") : "<div>無</div>"}
+      }).join("") : "<div>なし</div>"}
 
-      <h4>多出工具</h4>
+      <h4>余分な工具</h4>
       ${extraIds.length ? extraIds.map(id => `
         <div style="color:red;">- ${escapeHtml(id)}</div>
-      `).join("") : "<div>無</div>"}
+      `).join("") : "<div>なし</div>"}
 
-      <h4>借出中工具</h4>
+      <h4>貸出中の工具</h4>
       ${borrowedTools.length ? borrowedTools.map(t => `
         <div style="color:#d97706;">
           - ${escapeHtml(t.toolId)} ${escapeHtml(t.toolName || "")}
           / 借用者：${escapeHtml(t.borrower || "-")}
         </div>
-      `).join("") : "<div>無</div>"}
+      `).join("") : "<div>なし</div>"}
     </div>
   `;
 
-  showToolMessage("✅ 盤点完成。", missingIds.length === 0 && extraIds.length === 0);
+  showToolMessage("✅ 棚卸が完了しました。", missingIds.length === 0 && extraIds.length === 0);
 }
 
 /* =========================
@@ -1704,7 +1737,7 @@ async function startToolRentalScan() {
     );
   } catch (err) {
     console.error(err);
-    showToolRentalMessage("❌ 工具借出/返還カメラ起動失敗：" + (err?.message || err), false);
+    showToolRentalMessage("❌ 工具貸出／返却カメラの起動に失敗しました：" + (err?.message || err), false);
   }
 }
 
@@ -1721,7 +1754,7 @@ async function onToolRentalScanSuccess(decodedText) {
 
   setText("rentalToolId", toolId);
   setText("rentalToolName", "-");
-  setText("rentalToolStatus", "讀取中...");
+  setText("rentalToolStatus", "読み込み中...");
   currentRentalTool = null;
 
   try {
@@ -1743,7 +1776,7 @@ async function onToolRentalScanSuccess(decodedText) {
         setText("newToolId", toolId);
         setText("rentalToolId", toolId);
         setText("rentalToolName", "-");
-        setText("rentalToolStatus", "未登錄");
+        setText("rentalToolStatus", "未登録");
 
         setValue("newToolName", q.toolName || "");
         setValue("newToolBoxId", q.boxId || "");
@@ -1763,7 +1796,7 @@ async function onToolRentalScanSuccess(decodedText) {
           remark: q.remark || ""
         };
 
-        showToolRentalMessage("⚠️ 工具不存在，請先登錄。", false);
+        showToolRentalMessage("⚠️ 工具が未登録です。先に登録してください。", false);
         return;
     }
 
@@ -1771,13 +1804,15 @@ async function onToolRentalScanSuccess(decodedText) {
 
     setText("rentalToolId", currentRentalTool.toolId || toolId);
     setText("rentalToolName", currentRentalTool.toolName || "-");
-    setText("rentalToolStatus", currentRentalTool.status || "-");
+    setText("rentalToolStatus", displayToolStatus_(currentRentalTool.status));
+    setValue("rentalToolDescription", currentRentalTool.toolName || "");
+    updateRentalMode_(currentRentalTool.status);
 
-    showToolRentalMessage("✅ 工具讀取成功。", true);
+    showToolRentalMessage("✅ 工具を読み込みました。", true);
 
   } catch (e) {
     console.error(e);
-    showToolRentalMessage("❌ 工具讀取失敗：" + (e.message || e), false);
+    showToolRentalMessage("❌ 工具の読み込みに失敗しました：" + (e.message || e), false);
   }
 }
 
@@ -1900,8 +1935,8 @@ async function searchTools() {
         SID：${escapeHtml(t.sid || "-")}<br>
         BoxID：${escapeHtml(t.boxId || "-")}<br>
         保管棚：${escapeHtml(t.tana || "-")}<br>
-        狀態：<b>${escapeHtml(t.status || "-")}</b><br>
-        借用人：${escapeHtml(t.borrower || "-")}
+        状態：<b>${escapeHtml(displayToolStatus_(t.status))}</b><br>
+        借用者：${escapeHtml(t.borrower || "-")}
       </div>
     `;
 
@@ -1922,12 +1957,12 @@ async function registerNewToolAction() {
   const remark = String(document.getElementById("newToolRemark")?.value || "").trim();
 
   if (!toolId || toolId === "-") {
-    showToolRentalMessage("❌ ToolID 不明。請先掃描工具 QR。", false);
+    showToolRentalMessage("❌ ToolIDが不明です。先に工具QRをスキャンしてください。", false);
     return;
   }
 
   if (!toolName) {
-    showToolRentalMessage("❌ 請輸入工具名稱。", false);
+    showToolRentalMessage("❌ 工具名を入力してください。", false);
     return;
   }
 
@@ -1945,7 +1980,7 @@ async function registerNewToolAction() {
     });
 
     if (res.status !== "ok") {
-      throw new Error(res.message || "工具登錄失敗");
+      throw new Error(res.message || "工具の登録に失敗しました");
     }
 
     currentRentalTool = res.tool || {
@@ -1960,14 +1995,171 @@ async function registerNewToolAction() {
     setText("rentalToolId", toolId);
     setText("rentalToolName", toolName);
     setText("rentalToolStatus", "在庫");
+    updateRentalMode_("在庫");
 
     const form = document.getElementById("newToolForm");
     if (form) form.style.display = "none";
 
-    showToolRentalMessage("✅ 工具登錄完成。", true);
+    showToolRentalMessage("✅ 工具を登録しました。", true);
 
   } catch (e) {
     console.error(e);
-    showToolRentalMessage("❌ 工具登錄失敗：" + (e.message || e), false);
+    showToolRentalMessage("❌ 工具の登録に失しました：" + (e.message || e), false);
   }
 }
+
+/* =========================
+   Audit search / rental receipt (v2)
+========================= */
+let lastHistoryRows = [];
+let lastRentalRows = [];
+let currentRentalReceipt = null;
+const signaturePads = {};
+
+function toLocalInputValue_(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function demoHistory_() {
+  const now = Date.now();
+  return [
+    { timeText: new Date(now - 36e5).toLocaleString("ja-JP"), type: "出庫", productName: "真空ポンプシール", code: "VP-SEAL-024", serialNo: "S240081", qty: 2, stockBefore: 12, stockAfter: 10, reason: "RFエリア定期交換", operator: "Jason" },
+    { timeText: new Date(now - 864e5).toLocaleString("ja-JP"), type: "入庫", productName: "M8 ステンレスボルト", code: "SUS-M8-030", serialNo: "", qty: 50, stockBefore: 18, stockAfter: 68, reason: "定期補充", operator: "山口" },
+    { timeText: new Date(now - 1728e5).toLocaleString("ja-JP"), type: "出庫", productName: "加速器温度センサー", code: "TMP-PT100", serialNo: "PT-0192", qty: 1, stockBefore: 4, stockAfter: 3, reason: "故障交換", operator: "Jeffrey" }
+  ];
+}
+
+async function fetchStockHistory_(filters) {
+  if (IS_DEMO_MODE) return demoHistory_();
+  const qs = new URLSearchParams({ action:"log_search", q:filters.keyword, type:filters.type, from:filters.from, to:filters.to, _t:Date.now() });
+  const res = await fetch(`${API_BASE}?${qs}`, { cache:"no-store" });
+  const data = await res.json();
+  if (data.status !== "ok") throw new Error(data.message || "履歴の読み込みに失敗しました");
+  return Array.isArray(data.logs) ? data.logs : [];
+}
+
+async function searchStockHistory() {
+  const body = document.getElementById("historyBody");
+  const filters = { keyword:document.getElementById("historyKeyword")?.value.trim() || "", type:document.getElementById("historyType")?.value || "", from:document.getElementById("historyFrom")?.value || "", to:document.getElementById("historyTo")?.value || "" };
+  body.innerHTML = `<tr><td colspan="8" class="empty-cell">読み込み中...</td></tr>`;
+  try {
+    lastHistoryRows = await fetchStockHistory_(filters);
+    document.getElementById("historySummary").textContent = `${lastHistoryRows.length} 件の操作履歴`;
+    body.innerHTML = lastHistoryRows.length ? lastHistoryRows.map(r => `<tr><td>${escapeHtml(r.timeText)}</td><td><span class="type-badge ${String(r.type).includes("入") ? "type-in":"type-out"}">${escapeHtml(r.type)}</span></td><td><b>${escapeHtml(r.productName || "-")}</b></td><td>${escapeHtml(r.code || "-")}<br><small>${escapeHtml(r.serialNo || "")}</small></td><td>${escapeHtml(r.qty)}</td><td>${escapeHtml(r.stockBefore)} → ${escapeHtml(r.stockAfter)}</td><td>${escapeHtml(r.reason || "-")}</td><td>${escapeHtml(r.operator || "-")}</td></tr>`).join("") : `<tr><td colspan="8" class="empty-cell">該当するデータがありません</td></tr>`;
+  } catch (e) { body.innerHTML = `<tr><td colspan="8" class="empty-cell">読み込みに失敗しました：${escapeHtml(e.message)}</td></tr>`; }
+}
+
+function exportHistoryCsv() {
+  if (!lastHistoryRows.length) return alert("先に履歴を検索してください。");
+  const rows = [["日時","種別","部品", "Drawing No.","Serial No.","数量","変動前在庫","変動後在庫","理由","担当者"], ...lastHistoryRows.map(r => [r.timeText,r.type,r.productName,r.code,r.serialNo,r.qty,r.stockBefore,r.stockAfter,r.reason,r.operator])];
+  const csv = "\ufeff" + rows.map(row => row.map(v => `"${String(v ?? "").replaceAll('"','""')}"`).join(",")).join("\n");
+  const a = Object.assign(document.createElement("a"), { href:URL.createObjectURL(new Blob([csv],{type:"text/csv"})), download:`inventory-log-${new Date().toISOString().slice(0,10)}.csv` }); a.click(); URL.revokeObjectURL(a.href);
+}
+
+function initSignaturePad_(id) {
+  const canvas = document.getElementById(id); if (!canvas) return;
+  const ctx = canvas.getContext("2d"); ctx.lineWidth=2.4; ctx.lineCap="round"; ctx.strokeStyle="#17212b";
+  let drawing=false, signed=false;
+  const point = e => { const r=canvas.getBoundingClientRect(), p=e.touches?.[0] || e; return {x:(p.clientX-r.left)*canvas.width/r.width,y:(p.clientY-r.top)*canvas.height/r.height}; };
+  const start=e=>{ e.preventDefault(); drawing=true; signed=true; const p=point(e);ctx.beginPath();ctx.moveTo(p.x,p.y); };
+  const move=e=>{ if(!drawing)return;e.preventDefault();const p=point(e);ctx.lineTo(p.x,p.y);ctx.stroke(); };
+  const end=()=>{drawing=false};
+  canvas.addEventListener("pointerdown",start);canvas.addEventListener("pointermove",move);window.addEventListener("pointerup",end);
+  signaturePads[id]={ canvas, clear(){ctx.clearRect(0,0,canvas.width,canvas.height);signed=false}, hasInk(){return signed}, data(){return signed?canvas.toDataURL("image/png"):""} };
+}
+function clearSignature(id){ signaturePads[id]?.clear(); }
+
+function updateRentalMode_(status) {
+  const isBorrowed = String(status || "").trim() === "借出";
+  document.querySelectorAll(".borrow-only").forEach(el => el.classList.toggle("is-hidden", isBorrowed));
+  document.querySelectorAll(".return-only").forEach(el => el.classList.toggle("is-hidden", !isBorrowed));
+  document.getElementById("borrowerSignatureBox")?.classList.toggle("is-hidden", isBorrowed);
+  document.getElementById("returnSignatureBox")?.classList.toggle("is-hidden", !isBorrowed);
+  document.getElementById("borrowActionBtn")?.classList.toggle("is-hidden", isBorrowed);
+  document.getElementById("returnActionBtn")?.classList.toggle("is-hidden", !isBorrowed);
+  if (isBorrowed) setValue("actualReturnDate", toLocalInputValue_(new Date()));
+}
+
+function rentalPayload_() {
+  return { action:"tool_borrow_receipt", toolId:currentRentalTool?.toolId || document.getElementById("rentalToolId")?.textContent || "", toolName:document.getElementById("rentalToolDescription")?.value.trim() || currentRentalTool?.toolName || "", borrower:document.getElementById("toolBorrower")?.value.trim() || "", borrowDate:document.getElementById("borrowDate")?.value || "", expectedReturnDate:document.getElementById("expectedReturnDate")?.value || "", operator:document.getElementById("rentalOperator")?.value || "", note:document.getElementById("rentalNote")?.value.trim() || "", borrowerSignature:signaturePads.borrowerSignature?.data() || "" };
+}
+
+async function borrowToolAction() {
+  const p=rentalPayload_();
+  if (!p.toolId || p.toolId === "-") return showToolRentalMessage("❌ 先に工具QRをスキャンしてください。",false);
+  if (!p.borrower || !p.expectedReturnDate || !p.operator) return showToolRentalMessage("❌ 借用者、返却予定日、現場担当者を入力してください。",false);
+  if (!signaturePads.borrowerSignature?.hasInk()) return showToolRentalMessage("❌ 借用者が貸出署名を行ってください。",false);
+  try { const res=IS_DEMO_MODE?{status:"ok",rentalId:`TR-${Date.now()}`} : await postForm_(API_BASE,p); if(res.status!=="ok")throw new Error(res.message||"貸出に失敗しました"); currentRentalReceipt={...p,rentalId:res.rentalId,status:"借出中"}; if(currentRentalTool)currentRentalTool.status="借出"; setText("rentalToolStatus","貸出中"); clearSignature("operatorSignature"); updateRentalMode_("借出"); showToolRentalMessage(`✅ 受付番号 ${res.rentalId || ""} を登録しました。返却時は受取担当者が署名してください。`,true); searchRentalHistory(); } catch(e){showToolRentalMessage(`❌ 貸出に失敗しました：${e.message}`,false)}
+}
+
+async function returnToolAction() {
+  if(!currentRentalTool?.toolId && !currentRentalReceipt?.toolId)return showToolRentalMessage("❌ 先に工具をスキャンするか、貸出受付を選択してください。",false);
+  const returnOperator = document.getElementById("rentalOperator")?.value || "";
+  if (!returnOperator) return showToolRentalMessage("❌ 工具を受け取る現場担当者を選択してください。", false);
+  if (!signaturePads.operatorSignature?.hasInk()) return showToolRentalMessage("❌ 受取担当者は検品後に署名してください。", false);
+  const actual=toLocalInputValue_(new Date()); setValue("actualReturnDate",actual);
+  try{const res=IS_DEMO_MODE?{status:"ok"}:await postForm_(API_BASE,{action:"tool_return_receipt",toolId:currentRentalTool?.toolId||currentRentalReceipt.toolId,actualReturnDate:actual,operator:returnOperator,operatorSignature:signaturePads.operatorSignature.data()});if(res.status!=="ok")throw new Error(res.message||"返却に失敗しました");if(currentRentalTool)currentRentalTool.status="在庫";setText("rentalToolStatus","在庫");clearSignature("borrowerSignature");clearSignature("operatorSignature");updateRentalMode_("在庫");showToolRentalMessage("✅ 受取担当者の署名と実返却日時を記録しました。",true);searchRentalHistory()}catch(e){showToolRentalMessage(`❌ 返却に失敗しました：${e.message}`,false)}
+}
+
+function demoRentals_(){return [currentRentalReceipt || {rentalId:"TR-20260818-001",toolId:"TL-TQ-018",toolName:"デジタルトルクレンチ",borrower:"山田太郎",operator:"Jason",returnOperator:"",borrowDate:"2026-08-18 09:20",expectedReturnDate:"2026-08-22",actualReturnDate:"",status:"借出中",note:"加速器Aエリア定期保守",operatorSignature:"",borrowerSignature:"署名済み"}];}
+
+async function searchRentalHistory() {
+  const el = document.getElementById("rentalHistoryList");
+  const q = document.getElementById("rentalHistoryKeyword")?.value.trim() || "";
+  const status = document.getElementById("rentalHistoryStatus")?.value || "";
+  try {
+    if (IS_DEMO_MODE) {
+      lastRentalRows = demoRentals_();
+    } else {
+      const p = new URLSearchParams({action:"tool_rentals",q,status,_t:Date.now()});
+      const d = await fetch(`${API_BASE}?${p}`,{cache:"no-store"}).then(r=>r.json());
+      if (d.status !== "ok") throw new Error(d.message || "貸出・返却履歴の読み込みに失敗しました");
+      lastRentalRows = Array.isArray(d.rentals) ? d.rentals : [];
+    }
+
+    el.innerHTML = lastRentalRows.length ? lastRentalRows.map(r=>`
+      <article class="rental-card">
+        <div class="rental-card-top"><div><b>${escapeHtml(r.toolName||"-")}</b><div>${escapeHtml(r.toolId)} · ${escapeHtml(r.rentalId||"")}</div></div><span class="type-badge ${r.status==="已歸還"?"type-in":"type-out"}">${escapeHtml(displayToolStatus_(r.status))}</span></div>
+        <div class="rental-meta"><div><span>借用者</span>${escapeHtml(r.borrower)}</div><div><span>貸出担当者</span>${escapeHtml(r.operator)}</div><div><span>受取担当者</span>${escapeHtml(r.returnOperator||"未返却")}</div><div><span>貸出日時 / 返却予定日</span>${escapeHtml(r.borrowDate)}<br>${escapeHtml(r.expectedReturnDate)}</div><div><span>実返却日時</span>${escapeHtml(r.actualReturnDate||"未返却")}</div></div>
+        ${r.note?`<p>${escapeHtml(r.note)}</p>`:""}
+      </article>`).join("") : `<div class="empty-message">該当する貸出・返却履歴がありません</div>`;
+  } catch(e) {
+    lastRentalRows = [];
+    el.innerHTML = `<div class="empty-message">読み込みに失敗しました：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function exportRentalHistoryExcel() {
+  if (!lastRentalRows.length) return alert("出力する貸出・返却履歴を先に検索してください。");
+  const values = [[
+    "受付番号","ToolID","工具名","借用者","貸出日時","返却予定日",
+    "実返却日時","貸出担当者","受取担当者","状態","備考","受取担当者署名","借用者署名"
+  ], ...lastRentalRows.map(r => [
+    r.rentalId||"",r.toolId||"",r.toolName||"",r.borrower||"",r.borrowDate||"",
+    r.expectedReturnDate||"",r.actualReturnDate||"",r.operator||"",r.returnOperator||"",r.status||"",r.note||"",
+    r.operatorSignature?"署名済み":"未署名",r.borrowerSignature?"署名済み":"未署名"
+  ])];
+  const csv = "\ufeff" + values.map(row => row.map(value =>
+    `"${String(value ?? "").replaceAll('"','""')}"`
+  ).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], {type:"text/csv;charset=utf-8"}));
+  const link = Object.assign(document.createElement("a"), {
+    href:url,
+    download:`工具貸出返却履歴_${new Date().toISOString().slice(0,10)}.csv`
+  });
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+document.addEventListener("DOMContentLoaded",()=>{
+  ["operatorSignature","borrowerSignature"].forEach(initSignaturePad_);
+  setValue("borrowDate",toLocalInputValue_(new Date()));
+  const expected=new Date();expected.setDate(expected.getDate()+7);setValue("expectedReturnDate",expected.toISOString().slice(0,10));
+  loadOperatorsTo("rentalOperator");
+  updateRentalMode_("在庫");
+  ["historyKeyword","rentalHistoryKeyword"].forEach(id=>document.getElementById(id)?.addEventListener("keydown",e=>{if(e.key==="Enter")(id==="historyKeyword"?searchStockHistory:searchRentalHistory)()}));
+});
