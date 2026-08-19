@@ -2188,7 +2188,10 @@ async function returnToolAction() {
   try{const res=IS_DEMO_MODE?{status:"ok"}:await postForm_(API_BASE,{action:"tool_return_receipt",toolId:currentRentalTool?.toolId||currentRentalReceipt.toolId,actualReturnDate:actual,operator:returnOperator,operatorSignature:signaturePads.operatorSignature.data()});if(res.status!=="ok")throw new Error(res.message||"返却に失敗しました");if(currentRentalTool)currentRentalTool.status="在庫";setText("rentalToolStatus","在庫");clearSignature("borrowerSignature");clearSignature("operatorSignature");updateRentalMode_("在庫");showToolRentalMessage("✅ 受取担当者の署名と実返却日時を記録しました。",true);searchRentalHistory()}catch(e){showToolRentalMessage(`❌ 返却に失敗しました：${e.message}`,false)}
 }
 
-function demoRentals_(){return [currentRentalReceipt || {rentalId:"TR-20260818-001",toolId:"TL-TQ-018",toolName:"デジタルトルクレンチ",borrower:"山田太郎",operator:"Jason",returnOperator:"",borrowDate:"2026-08-18 09:20",expectedReturnDate:"2026-08-22",actualReturnDate:"",status:"借出中",note:"加速器Aエリア定期保守",operatorSignature:"",borrowerSignature:"署名済み"}];}
+function demoRentals_(){return [
+  currentRentalReceipt || {rentalId:"TR-20260819-002",toolId:"TL-DR-026",toolName:"充電式ドリル",borrower:"佐藤健",operator:"Jeffrey",returnOperator:"",borrowDate:"2026-08-19 10:15",expectedReturnDate:"2026-08-23",actualReturnDate:"",status:"借出中",note:"Bエリア架台取付",operatorSignature:"",borrowerSignature:"署名済み"},
+  {rentalId:"TR-20260818-001",toolId:"TL-TQ-018",toolName:"デジタルトルクレンチ",borrower:"山田太郎",operator:"Jason",returnOperator:"山口",borrowDate:"2026-08-18 09:20",expectedReturnDate:"2026-08-22",actualReturnDate:"2026-08-19 14:35",status:"已歸還",note:"加速器Aエリア定期保守",operatorSignature:"署名済み",borrowerSignature:"署名済み"}
+];}
 
 async function searchRentalHistory() {
   const el = document.getElementById("rentalHistoryList");
@@ -2196,7 +2199,12 @@ async function searchRentalHistory() {
   const status = document.getElementById("rentalHistoryStatus")?.value || "";
   try {
     if (IS_DEMO_MODE) {
-      lastRentalRows = demoRentals_();
+      const keyword = q.toLowerCase();
+      lastRentalRows = demoRentals_().filter(r => {
+        const matchesStatus = !status || r.status === status;
+        const text = [r.rentalId,r.toolId,r.toolName,r.borrower,r.operator,r.returnOperator].join(" ").toLowerCase();
+        return matchesStatus && (!keyword || text.includes(keyword));
+      });
     } else {
       const p = new URLSearchParams({action:"tool_rentals",q,status,_t:Date.now()});
       const d = await fetch(`${API_BASE}?${p}`,{cache:"no-store"}).then(r=>r.json());
@@ -2216,12 +2224,27 @@ async function searchRentalHistory() {
   }
 }
 
-function exportRentalHistoryExcel() {
-  if (!lastRentalRows.length) return alert("出力する貸出・返却履歴を先に検索してください。");
+async function exportRentalHistoryExcel() {
+  let exportRows = [];
+  const q = document.getElementById("rentalHistoryKeyword")?.value.trim() || "";
+  try {
+    if (IS_DEMO_MODE) {
+      const keyword = q.toLowerCase();
+      exportRows = demoRentals_().filter(r => !keyword || [r.rentalId,r.toolId,r.toolName,r.borrower,r.operator,r.returnOperator].join(" ").toLowerCase().includes(keyword));
+    } else {
+      const p = new URLSearchParams({action:"tool_rentals",q,status:"",_t:Date.now()});
+      const d = await fetch(`${API_BASE}?${p}`,{cache:"no-store"}).then(r=>r.json());
+      if (d.status !== "ok") throw new Error(d.message || "履歴の読み込みに失敗しました");
+      exportRows = Array.isArray(d.rentals) ? d.rentals : [];
+    }
+  } catch(e) {
+    return alert(`出力に失敗しました：${e.message}`);
+  }
+  if (!exportRows.length) return alert("出力できる貸出・返却履歴がありません。");
   const values = [[
     "受付番号","ToolID","工具名","借用者","貸出日時","返却予定日",
     "実返却日時","貸出担当者","受取担当者","状態","備考","受取担当者署名","借用者署名"
-  ], ...lastRentalRows.map(r => [
+  ], ...exportRows.map(r => [
     r.rentalId||"",r.toolId||"",r.toolName||"",r.borrower||"",r.borrowDate||"",
     r.expectedReturnDate||"",r.actualReturnDate||"",r.operator||"",r.returnOperator||"",r.status||"",r.note||"",
     r.operatorSignature?"署名済み":"未署名",r.borrowerSignature?"署名済み":"未署名"
