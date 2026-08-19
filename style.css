@@ -40,7 +40,7 @@ button:hover { background:var(--brand-dark); transform:translateY(-1px); }
 .signature-grid:has(.signature-box.is-hidden) { grid-template-columns:minmax(0,700px); justify-content:center; }
 .signature-box small { display:block; margin-top:8px; color:var(--muted); font-size:13px; }
 .signature-title { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:14px; font-weight:700; }
-.signature-box canvas { width:100%; height:140px; background:#fff; border:1px dashed #98a2b3; border-radius:8px; touch-action:none; cursor:crosshair; }
+.signature-box canvas { width:100%; height:140px; display:block; position:relative; z-index:1; background:#fff; border:1px dashed #98a2b3; border-radius:8px; touch-action:none!important; -ms-touch-action:none; overscroll-behavior:contain; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; cursor:crosshair; }
 .action-row { display:flex; justify-content:center; flex-wrap:wrap; gap:10px; margin:18px 0; }
 .subheading { margin-top:32px; }
 .rental-list { max-width:1100px; margin:16px auto; display:grid; gap:12px; }
@@ -336,4 +336,31 @@ button {
   .form-row select {
     font-size: 18px;
   }
+}
+
+.browser-support-notice {
+  position:sticky;
+  top:0;
+  z-index:9999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:18px;
+  padding:12px 18px;
+  color:#713b00;
+  background:#fff4d6;
+  border-bottom:1px solid #e7b85c;
+  box-shadow:0 3px 10px rgba(0,0,0,.12);
+  font-size:15px;
+  line-height:1.5;
+}
+.browser-support-notice button {
+  flex:0 0 auto;
+  padding:8px 14px;
+  color:#fff;
+  background:#8a4b08;
+  border-radius:7px;
+}
+@media (max-width:600px) {
+  .browser-support-notice { align-items:flex-start; justify-content:space-between; font-size:14px; }
 }
