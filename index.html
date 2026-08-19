@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; connect-src 'self' https://script.google.com https://script.googleusercontent.com; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self' https://script.google.com;" />
   <title>物料管理系統デモ</title>
 
   <link rel="stylesheet" href="style.css" />
@@ -13,7 +15,7 @@
 
 <div class="container">
 
-  <img src="sumitomo.png" class="logo" alt="Logo" />
+  <img src="images/sumitomo.png" class="logo" alt="Logo" />
 
   <h1>物料管理システムデモ</h1>
 
@@ -22,6 +24,7 @@
     <button type="button" onclick="showPage('stock-in')">入庫スキャン</button>
     <button type="button" onclick="showPage('stock-out')">出庫スキャン</button>
     <button type="button" onclick="showPage('search-page')">備品検索</button>
+    <button type="button" onclick="showPage('history-page')">操作履歴</button>
     <button type="button" onclick="showPage('tool-page')">工具管理</button>
   </nav>
 
@@ -29,7 +32,7 @@
     <h2>ホーム</h2>
 
     <p>品目数: <span id="itemCount">0</span></p>
-    <p>總數量: <span id="totalStock">0</span></p>
+    <p>総数量: <span id="totalStock">0</span></p>
 
     <h3 style="margin-top:16px;">📄 出入庫記録（7日間）</h3>
 
@@ -40,13 +43,29 @@
           <th>入/出庫</th>
           <th>部品名</th>
           <th>数量</th>
-          <th>使用原因</th>
+          <th>使用理由</th>
           <th>メンバー名前</th>
         </tr>
       </thead>
       <tbody id="homeLogBody"></tbody>
     </table>
   </div>
+
+  <section id="history-page" class="page">
+    <div class="page-heading">
+      <div><span class="eyebrow">AUDIT TRAIL</span><h2>入出庫履歴検索</h2></div>
+      <button type="button" class="secondary-btn" onclick="exportHistoryCsv()">CSV エクスポート</button>
+    </div>
+    <div class="filter-panel">
+      <label>キーワード<input id="historyKeyword" type="search" placeholder="部品名 / Drawing No. / Serial No. / 担当者"></label>
+      <label>操作種別<select id="historyType"><option value="">すべて</option><option value="入庫">入庫</option><option value="出庫">出庫</option></select></label>
+      <label>開始日<input id="historyFrom" type="date"></label>
+      <label>終了日<input id="historyTo" type="date"></label>
+      <button type="button" onclick="searchStockHistory()">履歴を検索</button>
+    </div>
+    <div id="historySummary" class="result-summary"></div>
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>日時</th><th>種別</th><th>部品</th><th>Drawing / Serial</th><th>数量</th><th>在庫変動</th><th>理由</th><th>担当者</th></tr></thead><tbody id="historyBody"><tr><td colspan="8" class="empty-cell">検索条件を入力してください</td></tr></tbody></table></div>
+  </section>
 
   <div id="stock-in" class="page">
     <h2>入庫スキャン</h2>
@@ -88,7 +107,7 @@
       <br />
 
       <label for="newItemName">部品名 (Name):</label>
-      <input type="text" id="newItemName" placeholder="請輸入備品名稱" />
+      <input type="text" id="newItemName" placeholder="備品名を入力してください" />
       <br />
 
       <label for="newItemCategory">分類 (Category):</label>
@@ -129,7 +148,7 @@
       </div>
       <br />
 
-      <label for="newItemNote">使用原因 / 備註：</label>
+      <label for="newItemNote">使用理由 / 備考：</label>
       <input type="text" id="newItemNote" placeholder="例: 定期補貨" />
       <br /><br />
 
@@ -270,7 +289,7 @@
   <div id="search-page" class="page">
     <h2>備品検索</h2>
 
-    <p>備品名稱、Drawing NO.、製番、分類、保管棚などで検索できます。</p>
+    <p>備品名、Drawing NO.、製番、分類、保管棚などの一部を入力すると、自動であいまい検索します。</p>
 
     <input
       type="text"
@@ -295,10 +314,10 @@
   <!-- 借出返還 -->
   <div class="tool-section">
 
-    <h3>工具借出 / 返還</h3>
+    <h3>工具貸出 / 返却</h3>
 
     <button type="button" onclick="startToolRentalScan()">
-      掃描工具 QR
+      工具QRをスキャン
     </button>
 
     <div id="toolRentalReader"
@@ -310,32 +329,30 @@
     ></div>
 
     <p>ToolID：<span id="rentalToolId">-</span></p>
-    <p>工具名稱：<span id="rentalToolName">-</span></p>
-    <p>目前狀態：<span id="rentalToolStatus">-</span></p>
+    <p>工具名：<span id="rentalToolName">-</span></p>
+    <p>現在の状態：<span id="rentalToolStatus">-</span></p>
 
-    <label>借用人：</label>
-    <input
-      type="text"
-      id="toolBorrower"
-      placeholder="例：Jason"
-    />
-
-    <br /><br />
-
-    <button type="button" onclick="borrowToolAction()">
-      借出
-    </button>
-
-    <button type="button" onclick="returnToolAction()">
-      返還
-    </button>
+    <div class="rental-form">
+      <label class="borrow-only">借用者<span class="required">*</span><input type="text" id="toolBorrower" placeholder="例：Jason"></label>
+      <label class="borrow-only">貸出工具<input type="text" id="rentalToolDescription" placeholder="スキャン後に自動入力（手動入力も可）"></label>
+      <label class="borrow-only">貸出日時<input type="datetime-local" id="borrowDate" readonly></label>
+      <label class="borrow-only">返却予定日<span class="required">*</span><input type="date" id="expectedReturnDate"></label>
+      <label>現場担当者<span class="required">*</span><select id="rentalOperator"><option value="">選択してください</option></select></label>
+      <label class="return-only is-hidden">実返却日時<input type="datetime-local" id="actualReturnDate" readonly></label>
+      <label class="full-field borrow-only">備考<textarea id="rentalNote" rows="2" placeholder="用途、作業エリア、その他の説明"></textarea></label>
+    </div>
+    <div class="signature-grid">
+      <div class="signature-box" id="borrowerSignatureBox"><div class="signature-title">貸出：借用者署名 <button type="button" class="text-btn" onclick="clearSignature('borrowerSignature')">クリア</button></div><canvas id="borrowerSignature" width="520" height="160"></canvas><small>借用者は工具と貸出情報を確認して署名してください。</small></div>
+      <div class="signature-box is-hidden" id="returnSignatureBox"><div class="signature-title">返却：受取担当者署名 <button type="button" class="text-btn" onclick="clearSignature('operatorSignature')">クリア</button></div><canvas id="operatorSignature" width="520" height="160"></canvas><small>工具を受け取る現場担当者は、検品後に署名してください。</small></div>
+    </div>
+    <div class="action-row"><button type="button" id="borrowActionBtn" onclick="borrowToolAction()">貸出受付を登録</button><button type="button" id="returnActionBtn" class="return-btn is-hidden" onclick="returnToolAction()">署名して返却を確定</button></div>
 
     <div id="newToolForm" style="display:none; margin-top:24px; border:1px solid #ccc; padding:16px;">
-      <h3>新規工具登錄</h3>
+      <h3>新規工具登録</h3>
 
       <p>ToolID：<span id="newToolId">-</span></p>
 
-      <label>工具名稱：</label>
+      <label>工具名：</label>
       <input type="text" id="newToolName" placeholder="例：六角レンチ" />
       <br /><br />
 
@@ -344,22 +361,22 @@
       <br /><br />
 
       <label>分類：</label>
-      <input type="text" id="newToolCategory" placeholder="例：手工具" />
+      <input type="text" id="newToolCategory" placeholder="例：ハンドツール" />
       <br /><br />
 
       <label>保管棚：</label>
       <input type="text" id="newToolTana" placeholder="例：A1" />
       <br /><br />
 
-      <label>工具箱名稱：</label>
+      <label>工具箱名：</label>
       <input type="text" id="newToolBoxName" placeholder="例：工具箱A" />
       <br /><br />
 
-      <label>備註：</label>
+      <label>備考：</label>
       <input type="text" id="newToolRemark" placeholder="例：新規登録" />
       <br /><br />
 
-      <button type="button" onclick="registerNewToolAction()">工具登錄</button>
+      <button type="button" onclick="registerNewToolAction()">工具を登録</button>
     </div>
 
     <div id="toolRentalMessage" style="margin-top:12px;"></div>
@@ -371,12 +388,12 @@
   <!-- 工具搜尋 -->
   <div class="tool-section">
 
-    <h3>工具搜尋</h3>
+    <h3>工具検索</h3>
 
     <input
       type="text"
       id="toolSearchInput"
-      placeholder="ToolID / SID / BoxID / 工具名 / 借用人"
+      placeholder="ToolID / SID / BoxID / 工具名 / 借用者"
       style="
         width:70%;
         padding:10px;
@@ -388,6 +405,10 @@
     </button>
 
     <div id="toolSearchResult" style="margin-top:16px;"></div>
+
+    <h3 class="subheading">貸出・返却受付履歴</h3>
+    <div class="filter-panel compact"><label>キーワード<input id="rentalHistoryKeyword" type="search" placeholder="ToolID / 工具 / 借用者 / 担当者"></label><label>状態<select id="rentalHistoryStatus"><option value="">すべて</option><option value="借出中">貸出中</option><option value="已歸還">返却済み</option></select></label><div class="filter-actions"><button type="button" onclick="searchRentalHistory()">検索</button><button type="button" class="secondary-btn" onclick="exportRentalHistoryExcel()">Excel用データ出力</button></div></div>
+    <div id="rentalHistoryList" class="rental-list"><div class="empty-message">貸出・返却履歴を検索してください</div></div>
 
   </div>
 
