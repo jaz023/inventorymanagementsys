@@ -2060,16 +2060,101 @@ function exportHistoryCsv() {
 
 function initSignaturePad_(id) {
   const canvas = document.getElementById(id); if (!canvas) return;
-  const ctx = canvas.getContext("2d"); ctx.lineWidth=2.4; ctx.lineCap="round"; ctx.strokeStyle="#17212b";
-  let drawing=false, signed=false;
-  const point = e => { const r=canvas.getBoundingClientRect(), p=e.touches?.[0] || e; return {x:(p.clientX-r.left)*canvas.width/r.width,y:(p.clientY-r.top)*canvas.height/r.height}; };
-  const start=e=>{ e.preventDefault(); drawing=true; signed=true; const p=point(e);ctx.beginPath();ctx.moveTo(p.x,p.y); };
-  const move=e=>{ if(!drawing)return;e.preventDefault();const p=point(e);ctx.lineTo(p.x,p.y);ctx.stroke(); };
-  const end=()=>{drawing=false};
-  canvas.addEventListener("pointerdown",start);canvas.addEventListener("pointermove",move);window.addEventListener("pointerup",end);
+  canvas.style.touchAction = "none";
+  const ctx = canvas.getContext("2d");
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "#17212b";
+  let drawing = false, signed = false, activePointerId = null;
+  const point = e => {
+    const r = canvas.getBoundingClientRect();
+    const p = e.touches?.[0] || e.changedTouches?.[0] || e;
+    return {
+      x: (p.clientX - r.left) * canvas.width / r.width,
+      y: (p.clientY - r.top) * canvas.height / r.height
+    };
+  };
+  const start = e => {
+    if (e.cancelable) e.preventDefault();
+    e.stopPropagation?.();
+    drawing = true;
+    signed = true;
+    activePointerId = e.pointerId ?? null;
+    if (activePointerId !== null && canvas.setPointerCapture) {
+      try { canvas.setPointerCapture(activePointerId); } catch (_) {}
+    }
+    const p = point(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + 0.01, p.y + 0.01);
+    ctx.stroke();
+  };
+  const move = e => {
+    if (!drawing || (activePointerId !== null && e.pointerId !== undefined && e.pointerId !== activePointerId)) return;
+    if (e.cancelable) e.preventDefault();
+    e.stopPropagation?.();
+    const p = point(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  };
+  const end = e => {
+    if (activePointerId !== null && e?.pointerId !== undefined && e.pointerId !== activePointerId) return;
+    if (e?.cancelable) e.preventDefault();
+    e?.stopPropagation?.();
+    drawing = false;
+    activePointerId = null;
+  };
+
+  // Samsung Internet / S Pen は Canvas ではなく上位の手書き入力層を
+  // event target にする場合がある。document の capture で座標を取得する。
+  const eventClientPoint = e => e.touches?.[0] || e.changedTouches?.[0] || e;
+  const startsInsideCanvas = e => {
+    const p = eventClientPoint(e);
+    const r = canvas.getBoundingClientRect();
+    return p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom;
+  };
+  const routedStart = e => { if (startsInsideCanvas(e)) start(e); };
+  const routedMove = e => { if (drawing) move(e); };
+  const routedEnd = e => { if (drawing) end(e); };
+
+  document.addEventListener("touchstart", routedStart, { passive:false, capture:true });
+  document.addEventListener("touchmove", routedMove, { passive:false, capture:true });
+  document.addEventListener("touchend", routedEnd, { passive:false, capture:true });
+  document.addEventListener("touchcancel", routedEnd, { passive:false, capture:true });
+
+  if (window.PointerEvent) {
+    document.addEventListener("pointerdown", routedStart, { passive:false, capture:true });
+    document.addEventListener("pointermove", routedMove, { passive:false, capture:true });
+    document.addEventListener("pointerup", routedEnd, { passive:false, capture:true });
+    document.addEventListener("pointercancel", routedEnd, { passive:false, capture:true });
+  } else {
+    document.addEventListener("mousedown", routedStart, true);
+    document.addEventListener("mousemove", routedMove, true);
+    document.addEventListener("mouseup", routedEnd, true);
+  }
   signaturePads[id]={ canvas, clear(){ctx.clearRect(0,0,canvas.width,canvas.height);signed=false}, hasInk(){return signed}, data(){return signed?canvas.toDataURL("image/png"):""} };
 }
 function clearSignature(id){ signaturePads[id]?.clear(); }
+
+function showAndroidChromeNotice_() {
+  const ua = navigator.userAgent || "";
+  if (!/Android/i.test(ua)) return;
+
+  const isChrome = /Chrome\/\d+/i.test(ua) &&
+    !/(SamsungBrowser|EdgA|OPR|Firefox|FxiOS|HuaweiBrowser|MiuiBrowser|HeyTapBrowser|VivoBrowser|UCBrowser|\bwv\b)/i.test(ua);
+  if (isChrome || document.getElementById("androidChromeNotice")) return;
+
+  const notice = document.createElement("aside");
+  notice.id = "androidChromeNotice";
+  notice.className = "browser-support-notice";
+  notice.setAttribute("role", "alert");
+  notice.innerHTML = `
+    <div><strong>署名機能をご利用の方へ</strong><br>Android の標準ブラウザーでは署名できない場合があります。Google Chrome でこのページを開いてください。</div>
+    <button type="button" aria-label="閉じる">閉じる</button>`;
+  notice.querySelector("button").addEventListener("click", () => notice.remove());
+  document.body.prepend(notice);
+}
 
 function updateRentalMode_(status) {
   const isBorrowed = String(status || "").trim() === "借出";
@@ -2156,6 +2241,7 @@ function exportRentalHistoryExcel() {
 }
 
 document.addEventListener("DOMContentLoaded",()=>{
+  showAndroidChromeNotice_();
   ["operatorSignature","borrowerSignature"].forEach(initSignaturePad_);
   setValue("borrowDate",toLocalInputValue_(new Date()));
   const expected=new Date();expected.setDate(expected.getDate()+7);setValue("expectedReturnDate",expected.toISOString().slice(0,10));
