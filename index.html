@@ -7,7 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; connect-src 'self' https://script.google.com https://script.googleusercontent.com; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self' https://script.google.com;" />
   <title>物料管理系統デモ</title>
 
-  <link rel="stylesheet" href="style.css?v=20260819-android-chrome" />
+  <link rel="stylesheet" href="style.css?v=20260819-rental-open-only" />
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 
@@ -407,13 +407,13 @@
     <div id="toolSearchResult" style="margin-top:16px;"></div>
 
     <h3 class="subheading">貸出・返却受付履歴</h3>
-    <div class="filter-panel compact"><label>キーワード<input id="rentalHistoryKeyword" type="search" placeholder="ToolID / 工具 / 借用者 / 担当者"></label><label>状態<select id="rentalHistoryStatus"><option value="">すべて</option><option value="借出中">貸出中</option><option value="已歸還">返却済み</option></select></label><div class="filter-actions"><button type="button" onclick="searchRentalHistory()">検索</button><button type="button" class="secondary-btn" onclick="exportRentalHistoryExcel()">Excel用データ出力</button></div></div>
+    <div class="filter-panel compact"><label>キーワード<input id="rentalHistoryKeyword" type="search" placeholder="ToolID / 工具 / 借用者 / 担当者"></label><label>表示対象<select id="rentalHistoryStatus" disabled><option value="借出中" selected>貸出中のみ</option></select></label><div class="filter-actions"><button type="button" onclick="searchRentalHistory()">検索</button><button type="button" class="secondary-btn" onclick="exportRentalHistoryExcel()">全履歴をExcel用に出力</button></div></div>
     <div id="rentalHistoryList" class="rental-list"><div class="empty-message">貸出・返却履歴を検索してください</div></div>
 
   </div>
 
   </div>
 
-<script src="script.js?v=20260819-android-chrome"></script>
+<script src="script.js?v=20260819-rental-open-only"></script>
 </body>
 </html>
